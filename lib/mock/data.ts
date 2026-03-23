@@ -15,17 +15,36 @@ export interface MockPostAuthor {
   avatar: string;
 }
 
+export interface MockReaction {
+  emoji: string;
+  label: string;
+  count: number;
+  reacted: boolean;
+}
+
+export interface MockLinkPreview {
+  title: string;
+  description: string;
+  url: string;
+  source: string;
+}
+
 export interface MockPost {
   id: string;
   author: MockPostAuthor;
+  title?: string;
   content: string;
   publishedAt: string;
+  isEdited?: boolean;
   likes: number;
   comments: number;
   reposts: number;
   tags: string[];
   liked: boolean;
   imageUrl?: string;
+  linkPreview?: MockLinkPreview;
+  commentPreview?: string;
+  reactions?: MockReaction[];
 }
 
 export interface MockConversation {
@@ -70,10 +89,41 @@ export const MOCK_POSTS: MockPost[] = [
   {
     id: 'post_001',
     author: {
+      name: 'Solsynth LLC',
+      handle: '@solsynth',
+      avatar: 'https://i.pravatar.cc/150?img=12',
+    },
+    title: '迁移到 v3 的通知',
+    content:
+      '经过小羊艰苦的八小时奋斗，大部份数据已经迁移到 v3 版本。\n\n除了钱包、以前的签到记录、密码之外的验证方式（V3 尚未实现），所有数据基本迁移完成。\n\n欢迎前往新网域 https://solian.app 体验。原生客户端将会在后续几天陆续发布。',
+    publishedAt: '2025-03-21T10:00:00Z',
+    isEdited: true,
+    likes: 3,
+    comments: 2,
+    reposts: 0,
+    tags: ['SolarNetwork'],
+    liked: false,
+    imageUrl: 'https://picsum.photos/seed/solian1/600/320',
+    linkPreview: {
+      title: 'Solar Network',
+      description: 'A new Flutter project.',
+      url: 'https://solian.app',
+      source: '由 HyperNet.Reader 提供支持',
+    },
+    commentPreview: '八小时，的确很苦，点赞了🤌😈🫰',
+    reactions: [
+      { emoji: '👍', label: '顶', count: 3, reacted: false },
+      { emoji: '👍', label: 'thumb_up', count: 3, reacted: false },
+    ],
+  },
+  {
+    id: 'post_002',
+    author: {
       name: 'LittleSheep',
       handle: '@little_sheep',
       avatar: 'https://i.pravatar.cc/150?img=12',
     },
+    title: 'Solar Network v3 性能优化报告',
     content:
       'Just deployed the new Solar Network update! The performance improvements are incredible 🚀 The new architecture handles 10x more concurrent connections and latency dropped by 60%.',
     publishedAt: '2025-03-23T08:30:00Z',
@@ -82,9 +132,14 @@ export const MOCK_POSTS: MockPost[] = [
     reposts: 3,
     tags: ['SolarNetwork', 'Dev'],
     liked: false,
+    commentPreview: 'Great work! The new architecture is much faster.',
+    reactions: [
+      { emoji: '🚀', label: '太棒了', count: 12, reacted: true },
+      { emoji: '❤️', label: '喜欢', count: 8, reacted: false },
+    ],
   },
   {
-    id: 'post_002',
+    id: 'post_003',
     author: {
       name: 'Akira Tanaka',
       handle: '@akira_dev',
@@ -98,14 +153,18 @@ export const MOCK_POSTS: MockPost[] = [
     reposts: 5,
     tags: ['Programming'],
     liked: true,
+    reactions: [
+      { emoji: '💪', label: '加油', count: 20, reacted: true },
+    ],
   },
   {
-    id: 'post_003',
+    id: 'post_004',
     author: {
       name: 'Maria Chen',
       handle: '@maria_ux',
       avatar: 'https://i.pravatar.cc/150?img=47',
     },
+    title: 'Material You 新设计预览',
     content:
       'Just finished the new onboarding flow design. Material You dynamic colors make everything feel so cohesive! Sharing the Figma file soon 🎨',
     publishedAt: '2025-03-23T06:45:00Z',
@@ -115,9 +174,14 @@ export const MOCK_POSTS: MockPost[] = [
     tags: ['Design', 'MaterialYou', 'UX'],
     liked: false,
     imageUrl: 'https://picsum.photos/seed/design1/600/300',
+    commentPreview: 'The color palette is stunning! 😍',
+    reactions: [
+      { emoji: '🎨', label: '美', count: 45, reacted: false },
+      { emoji: '👍', label: '顶', count: 31, reacted: false },
+    ],
   },
   {
-    id: 'post_004',
+    id: 'post_005',
     author: {
       name: 'DevBot9000',
       handle: '@devbot9k',
@@ -131,9 +195,13 @@ export const MOCK_POSTS: MockPost[] = [
     reposts: 87,
     tags: ['JavaScript', 'WebDev', 'Tips'],
     liked: true,
+    reactions: [
+      { emoji: '💡', label: '有用', count: 87, reacted: false },
+      { emoji: '👍', label: '顶', count: 42, reacted: true },
+    ],
   },
   {
-    id: 'post_005',
+    id: 'post_006',
     author: {
       name: 'Yuki Sato',
       handle: '@yuki_anime',
@@ -147,14 +215,19 @@ export const MOCK_POSTS: MockPost[] = [
     reposts: 12,
     tags: ['ACG', 'Anime'],
     liked: false,
+    commentPreview: '僕は「ダンジョン飯」が一番楽しみ！',
+    reactions: [
+      { emoji: '🎌', label: 'いいね', count: 60, reacted: false },
+    ],
   },
   {
-    id: 'post_006',
+    id: 'post_007',
     author: {
       name: 'Alex Rivera',
       handle: '@alex_builds',
       avatar: 'https://i.pravatar.cc/150?img=57',
     },
+    title: '100th Open Source PR Milestone 🎉',
     content:
       'Open source contribution milestone: just merged my 100th PR to a major project! Started contributing 2 years ago and it has been an amazing journey. Thank you to all maintainers who patiently reviewed my code.',
     publishedAt: '2025-03-23T03:00:00Z',
@@ -163,9 +236,14 @@ export const MOCK_POSTS: MockPost[] = [
     reposts: 62,
     tags: ['OpenSource', 'Dev', 'Milestone'],
     liked: false,
+    commentPreview: 'Congratulations! Keep up the great work! 🎊',
+    reactions: [
+      { emoji: '🎉', label: '恭喜', count: 120, reacted: false },
+      { emoji: '👏', label: '鼓掌', count: 89, reacted: false },
+    ],
   },
   {
-    id: 'post_007',
+    id: 'post_008',
     author: {
       name: 'Luna Park',
       handle: '@luna_creates',
@@ -180,22 +258,9 @@ export const MOCK_POSTS: MockPost[] = [
     tags: ['Art', 'ReactNative', 'Skia'],
     liked: true,
     imageUrl: 'https://picsum.photos/seed/art1/600/300',
-  },
-  {
-    id: 'post_008',
-    author: {
-      name: 'Thomas Wright',
-      handle: '@thomas_infra',
-      avatar: 'https://i.pravatar.cc/150?img=70',
-    },
-    content:
-      'Migrated our entire infrastructure to Kubernetes this weekend. Zero downtime, 40% cost reduction, and the team is finally sleeping through the night. Modern DevOps is truly magical when done right.',
-    publishedAt: '2025-03-22T22:00:00Z',
-    likes: 267,
-    comments: 45,
-    reposts: 33,
-    tags: ['DevOps', 'Kubernetes', 'Infrastructure'],
-    liked: false,
+    reactions: [
+      { emoji: '✨', label: '惊艳', count: 55, reacted: true },
+    ],
   },
 ];
 
