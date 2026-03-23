@@ -326,6 +326,21 @@ export const MOCK_COMMENTS: MockComment[] = [
   },
 ];
 
+export interface MockNewsArticle {
+  hash: string;
+  title: string;
+  description: string;
+  publishedAt: string;
+}
+
+export const MOCK_NEWS_ARTICLE: MockNewsArticle = {
+  hash: 'news_001',
+  title: 'Solar Network Achieves 10 Million Active Users Milestone',
+  description:
+    '<p>The decentralized social platform Solar Network has reached a major milestone with over 10 million active users globally. The platform, known for its privacy-first approach and open-source infrastructure, has seen explosive growth in recent months following the launch of its Material You redesign.</p>',
+  publishedAt: '2025-03-23T06:00:00Z',
+};
+
 export const MOCK_TRENDING_TAGS: string[] = [
   'SolarNetwork',
   'ACG',

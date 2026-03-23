@@ -1,33 +1,22 @@
-import { Alert, FlatList, View } from 'react-native';
-import { Appbar, Badge, FAB, IconButton, useTheme } from 'react-native-paper';
+import { ScrollView, View } from 'react-native';
+import { Appbar, useTheme } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import PostCard from '@/components/posts/PostCard';
-import { MOCK_POSTS, type MockPost } from '@/lib/mock/data';
+import SpecialDayCard from '@/components/home/SpecialDayCard';
+import RecommendationCard from '@/components/home/RecommendationCard';
+import CheckInCard from '@/components/home/CheckInCard';
+import NotificationCard from '@/components/home/NotificationCard';
+import TodayNewsCard from '@/components/home/TodayNewsCard';
 
-const NOTIFICATION_COUNT = 3;
+const CARD_GAP = 8;
+const HORIZONTAL_PADDING = 16;
 
-function renderPostItem({ item }: { item: MockPost }) {
-  return <PostCard post={item} />;
-}
-
-function extractPostKey(item: MockPost): string {
-  return item.id;
-}
-
-function ListFooter() {
-  return <View style={{ height: 100 }} />;
-}
-
-export default function TimelineScreen() {
+export default function HomeScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
-      <Appbar.Header
-        style={{ backgroundColor: theme.colors.surface }}
-        elevated
-      >
+      <Appbar.Header style={{ backgroundColor: theme.colors.surface }} elevated>
         <Appbar.Content
           title="Solar Network"
           titleStyle={{
@@ -37,52 +26,34 @@ export default function TimelineScreen() {
           }}
         />
         <Appbar.Action
-          icon="magnify"
+          icon="cog-outline"
           iconColor={theme.colors.onSurfaceVariant}
           onPress={() => {}}
         />
-        <View>
-          <Appbar.Action
-            icon="bell-outline"
-            iconColor={theme.colors.onSurfaceVariant}
-            onPress={() => {}}
-          />
-          {NOTIFICATION_COUNT > 0 && (
-            <Badge
-              size={16}
-              style={{
-                position: 'absolute',
-                top: 6,
-                right: 6,
-                backgroundColor: theme.colors.error,
-              }}
-            >
-              {NOTIFICATION_COUNT}
-            </Badge>
-          )}
-        </View>
       </Appbar.Header>
 
-      <FlatList
-        data={MOCK_POSTS}
-        renderItem={renderPostItem}
-        keyExtractor={extractPostKey}
-        contentContainerStyle={{ paddingTop: 8 }}
-        ListFooterComponent={ListFooter}
-        showsVerticalScrollIndicator={false}
-      />
-
-      <FAB
-        icon="pencil"
-        style={{
-          position: 'absolute',
-          right: 16,
-          bottom: insets.bottom + 16,
-          backgroundColor: theme.colors.primaryContainer,
+      <ScrollView
+        contentContainerStyle={{
+          padding: HORIZONTAL_PADDING,
+          paddingBottom: insets.bottom + 80,
+          gap: CARD_GAP,
         }}
-        color={theme.colors.onPrimaryContainer}
-        onPress={() => Alert.alert('提示', '发帖功能开发中')}
-      />
+        showsVerticalScrollIndicator={false}
+      >
+        <SpecialDayCard />
+
+        <View style={{ flexDirection: 'row', gap: CARD_GAP }}>
+          <View style={{ flex: 3 }}>
+            <RecommendationCard />
+          </View>
+          <View style={{ flex: 2, gap: CARD_GAP }}>
+            <CheckInCard />
+            <NotificationCard />
+          </View>
+        </View>
+
+        <TodayNewsCard />
+      </ScrollView>
     </View>
   );
 }
