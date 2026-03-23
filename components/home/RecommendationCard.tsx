@@ -1,10 +1,78 @@
 import { useState } from 'react';
-import { View, ScrollView } from 'react-native';
-import { Card, IconButton, Text, useTheme } from 'react-native-paper';
-import { MOCK_POSTS } from '@/lib/mock/data';
-import PostCard from '@/components/posts/PostCard';
+import { Image, View } from 'react-native';
+import { Card, Divider, IconButton, Text, useTheme } from 'react-native-paper';
+import { formatDistanceToNow } from 'date-fns';
+import { MOCK_POSTS, type MockPost } from '@/lib/mock/data';
+import UserAvatar from '@/components/common/UserAvatar';
 
-const RECOMMENDATIONS = MOCK_POSTS.slice(0, 3);
+const RECOMMENDATIONS = MOCK_POSTS.slice(0, 5);
+
+interface InlinePostProps {
+  post: MockPost;
+}
+
+function InlinePost({ post }: InlinePostProps) {
+  const theme = useTheme();
+  const relativeTime = formatDistanceToNow(new Date(post.publishedAt), { addSuffix: true });
+
+  return (
+    <View style={{ paddingHorizontal: 16, paddingBottom: 12 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+        <UserAvatar uri={post.author.avatar} name={post.author.name} size={36} />
+        <View style={{ flex: 1 }}>
+          <Text variant="titleSmall" style={{ color: theme.colors.onSurface }}>
+            {post.author.name}
+          </Text>
+          <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+            {post.author.handle} {relativeTime}
+          </Text>
+        </View>
+        <IconButton
+          icon="dots-horizontal"
+          size={18}
+          iconColor={theme.colors.onSurfaceVariant}
+          style={{ margin: 0 }}
+          onPress={() => {}}
+        />
+      </View>
+
+      <Text
+        variant="bodyMedium"
+        numberOfLines={6}
+        style={{ color: theme.colors.onSurface, lineHeight: 22 }}
+      >
+        {post.content}
+      </Text>
+
+      {post.imageUrl && (
+        <Image
+          source={{ uri: post.imageUrl }}
+          style={{
+            width: '100%',
+            height: 160,
+            borderRadius: 8,
+            marginTop: 10,
+            backgroundColor: theme.colors.surfaceVariant,
+          }}
+          resizeMode="cover"
+        />
+      )}
+
+      <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8, gap: 4 }}>
+        <IconButton
+          icon="eye-outline"
+          size={14}
+          iconColor={theme.colors.onSurfaceVariant}
+          style={{ margin: 0 }}
+          onPress={() => {}}
+        />
+        <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+          {post.likes + post.comments} 次浏览
+        </Text>
+      </View>
+    </View>
+  );
+}
 
 export default function RecommendationCard() {
   const theme = useTheme();
@@ -31,16 +99,16 @@ export default function RecommendationCard() {
           flexDirection: 'row',
           alignItems: 'center',
           paddingHorizontal: 16,
-          paddingTop: 12,
-          paddingBottom: 4,
+          paddingTop: 14,
+          paddingBottom: 10,
         }}
       >
-        <Text style={{ fontSize: 18 }}>⭐</Text>
+        <Text style={{ fontSize: 16, marginRight: 8 }}>☆</Text>
         <Text
           variant="titleMedium"
-          style={{ color: theme.colors.onSurface, marginLeft: 8, flex: 1 }}
+          style={{ color: theme.colors.onSurface, flex: 1 }}
         >
-          Recommended
+          推荐帖子
         </Text>
         <Text
           variant="bodySmall"
@@ -50,17 +118,19 @@ export default function RecommendationCard() {
         </Text>
       </View>
 
-      <ScrollView style={{ maxHeight: 300 }} showsVerticalScrollIndicator={false}>
-        <PostCard post={post} />
-      </ScrollView>
+      <Divider />
+
+      <InlinePost post={post} />
+
+      <Divider />
 
       <View
         style={{
           flexDirection: 'row',
           justifyContent: 'center',
           alignItems: 'center',
-          paddingBottom: 8,
-          gap: 8,
+          paddingVertical: 4,
+          gap: 4,
         }}
       >
         <IconButton

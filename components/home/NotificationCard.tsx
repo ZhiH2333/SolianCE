@@ -1,7 +1,7 @@
 import { View } from 'react-native';
 import { Card, IconButton, Text, useTheme } from 'react-native-paper';
 
-const MOCK_UNREAD_COUNT = 3;
+const MOCK_UNREAD_COUNT = 0;
 
 export default function NotificationCard() {
   const theme = useTheme();
@@ -10,29 +10,28 @@ export default function NotificationCard() {
     <Card
       mode="elevated"
       elevation={1}
-      style={{ flex: 1, borderRadius: 12, backgroundColor: theme.colors.surface }}
+      style={{ borderRadius: 12, backgroundColor: theme.colors.surface }}
     >
-      <Card.Content style={{ flex: 1, padding: 20 }}>
-        <View style={{ flex: 1, justifyContent: 'space-between' }}>
+      <Card.Content style={{ padding: 20 }}>
+        <View style={{ minHeight: 120, justifyContent: 'space-between' }}>
           <View>
             <Text variant="titleMedium" style={{ color: theme.colors.onSurface }}>
-              Notifications
+              通知
             </Text>
             <Text
-              variant="bodyLarge"
+              variant="bodyMedium"
               style={{
-                color:
-                  MOCK_UNREAD_COUNT > 0
-                    ? theme.colors.primary
-                    : theme.colors.onSurfaceVariant,
+                color: theme.colors.onSurfaceVariant,
                 marginTop: 4,
               }}
             >
-              {MOCK_UNREAD_COUNT} unread
+              {MOCK_UNREAD_COUNT > 0
+                ? `${MOCK_UNREAD_COUNT} 条未读`
+                : '无未读通知'}
             </Text>
           </View>
 
-          <View style={{ alignItems: 'flex-end', marginTop: 12 }}>
+          <View style={{ alignItems: 'flex-end', marginTop: 16 }}>
             <View
               style={{
                 borderRadius: 999,
@@ -41,7 +40,7 @@ export default function NotificationCard() {
             >
               <IconButton
                 icon="arrow-right"
-                size={20}
+                size={22}
                 iconColor={theme.colors.onSurfaceVariant}
                 onPress={() => {}}
               />

@@ -8,7 +8,6 @@ import NotificationCard from '@/components/home/NotificationCard';
 import TodayNewsCard from '@/components/home/TodayNewsCard';
 
 const CARD_GAP = 8;
-const HORIZONTAL_PADDING = 16;
 
 export default function HomeScreen() {
   const theme = useTheme();
@@ -17,24 +16,29 @@ export default function HomeScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
       <Appbar.Header style={{ backgroundColor: theme.colors.surface }} elevated>
+        <Appbar.Action
+          icon="menu"
+          iconColor={theme.colors.onSurface}
+          onPress={() => {}}
+        />
         <Appbar.Content
-          title="Solar Network"
+          title="首页"
           titleStyle={{
-            color: theme.colors.primary,
-            fontWeight: '700',
-            fontSize: 20,
+            color: theme.colors.onSurface,
+            fontWeight: '600',
+            textAlign: 'center',
           }}
         />
         <Appbar.Action
-          icon="cog-outline"
-          iconColor={theme.colors.onSurfaceVariant}
+          icon="menu"
+          iconColor="transparent"
           onPress={() => {}}
         />
       </Appbar.Header>
 
       <ScrollView
         contentContainerStyle={{
-          padding: HORIZONTAL_PADDING,
+          padding: CARD_GAP,
           paddingBottom: insets.bottom + 80,
           gap: CARD_GAP,
         }}
@@ -42,12 +46,13 @@ export default function HomeScreen() {
       >
         <SpecialDayCard />
 
+        <RecommendationCard />
+
         <View style={{ flexDirection: 'row', gap: CARD_GAP }}>
-          <View style={{ flex: 3 }}>
-            <RecommendationCard />
-          </View>
-          <View style={{ flex: 2, gap: CARD_GAP }}>
+          <View style={{ flex: 1 }}>
             <CheckInCard />
+          </View>
+          <View style={{ flex: 1 }}>
             <NotificationCard />
           </View>
         </View>
