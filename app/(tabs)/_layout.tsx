@@ -1,71 +1,71 @@
-import React from 'react';
-import { SymbolView } from 'expo-symbols';
-import { Link, Tabs } from 'expo-router';
-import { Platform, Pressable } from 'react-native';
+import { CommonActions } from '@react-navigation/native';
+import { Tabs } from 'expo-router';
+import { BottomNavigation } from 'react-native-paper';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useTheme } from 'react-native-paper';
 
-import Colors from '@/constants/Colors';
-import { useColorScheme } from '@/components/useColorScheme';
-import { useClientOnlyValue } from '@/components/useClientOnlyValue';
+type IconProps = { color: string; size: number };
+type RouteName = 'index' | 'explore' | 'messaging' | 'profile';
+
+const TAB_ICONS: Record<RouteName, { default: string; focused: string }> = {
+  index: { default: 'home-outline', focused: 'home' },
+  explore: { default: 'compass-outline', focused: 'compass' },
+  messaging: { default: 'message-text-outline', focused: 'message-text' },
+  profile: { default: 'account-outline', focused: 'account' },
+};
+
+const TAB_LABELS: Record<RouteName, string> = {
+  index: 'Home',
+  explore: 'Explore',
+  messaging: 'Messages',
+  profile: 'Profile',
+};
+
+function renderTabIcon(routeName: string, focused: boolean, color: string): React.ReactNode {
+  const iconSet = TAB_ICONS[routeName as RouteName];
+  const iconName = focused ? iconSet?.focused : iconSet?.default;
+  return <MaterialCommunityIcons name={iconName as any} size={24} color={color} />;
+}
 
 export default function TabLayout() {
-  const colorScheme = useColorScheme();
+  const theme = useTheme();
 
   return (
     <Tabs
-      screenOptions={{
-        tabBarActiveTintColor: Colors[colorScheme].tint,
-        // Disable the static render of the header on web
-        // to prevent a hydration error in React Navigation v6.
-        headerShown: useClientOnlyValue(false, true),
-      }}>
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: 'Tab One',
-          tabBarIcon: ({ color }) => (
-            <SymbolView
-              name={{
-                ios: 'chevron.left.forwardslash.chevron.right',
-                android: 'code',
-                web: 'code',
-              }}
-              tintColor={color}
-              size={28}
-            />
-          ),
-          headerRight: () => (
-            <Link href="/modal" asChild>
-              <Pressable style={{ marginRight: 15 }}>
-                {({ pressed }) => (
-                  <SymbolView
-                    name={{ ios: 'info.circle', android: 'info', web: 'info' }}
-                    size={25}
-                    tintColor={Colors[colorScheme].text}
-                    style={{ opacity: pressed ? 0.5 : 1 }}
-                  />
-                )}
-              </Pressable>
-            </Link>
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="two"
-        options={{
-          title: 'Tab Two',
-          tabBarIcon: ({ color }) => (
-            <SymbolView
-              name={{
-                ios: 'chevron.left.forwardslash.chevron.right',
-                android: 'code',
-                web: 'code',
-              }}
-              tintColor={color}
-              size={28}
-            />
-          ),
-        }}
-      />
+      screenOptions={{ headerShown: false }}
+      tabBar={({ navigation, state, insets }) => (
+        <BottomNavigation.Bar
+          navigationState={state}
+          safeAreaInsets={insets}
+          activeColor={theme.colors.primary}
+          inactiveColor={theme.colors.onSurfaceVariant}
+          style={{ backgroundColor: theme.colors.elevation.level2 }}
+          onTabPress={({ route, preventDefault }) => {
+            const event = navigation.emit({
+              type: 'tabPress',
+              target: route.key,
+              canPreventDefault: true,
+            });
+            if (event.defaultPrevented) {
+              preventDefault();
+            } else {
+              navigation.dispatch({
+                ...CommonActions.navigate(route.name, route.params),
+                target: state.key,
+              });
+            }
+          }}
+          renderIcon={({ route, focused, color }) =>
+            renderTabIcon(route.name, focused, color)
+          }
+          getLabelText={({ route }) => TAB_LABELS[route.name as RouteName] ?? route.name}
+        />
+      )}
+    >
+      <Tabs.Screen name="index" />
+      <Tabs.Screen name="explore" />
+      <Tabs.Screen name="messaging" />
+      <Tabs.Screen name="profile" />
     </Tabs>
   );
 }
