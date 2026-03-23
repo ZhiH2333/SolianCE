@@ -1,5 +1,4 @@
-import { MD3LightTheme, MD3DarkTheme, adaptNavigationTheme } from 'react-native-paper';
-import { DarkTheme as NavigationDarkTheme, DefaultTheme as NavigationDefaultTheme } from '@react-navigation/native';
+import { MD3LightTheme, MD3DarkTheme } from 'react-native-paper';
 
 const SEED_COLOR = '#6750A4';
 
@@ -99,29 +98,6 @@ export const AppLightTheme = {
 export const AppDarkTheme = {
   ...MD3DarkTheme,
   colors: customDarkColors,
-};
-
-const { LightTheme: NavLightTheme, DarkTheme: NavDarkTheme } = adaptNavigationTheme({
-  reactNavigationLight: NavigationDefaultTheme,
-  reactNavigationDark: NavigationDarkTheme,
-});
-
-export const CombinedLightTheme = {
-  ...AppLightTheme,
-  ...NavLightTheme,
-  colors: {
-    ...AppLightTheme.colors,
-    ...NavLightTheme.colors,
-  },
-};
-
-export const CombinedDarkTheme = {
-  ...AppDarkTheme,
-  ...NavDarkTheme,
-  colors: {
-    ...AppDarkTheme.colors,
-    ...NavDarkTheme.colors,
-  },
 };
 
 export { SEED_COLOR };

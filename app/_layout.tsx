@@ -4,7 +4,7 @@ import { useEffect } from 'react';
 import { useColorScheme } from 'react-native';
 import { PaperProvider } from 'react-native-paper';
 import 'react-native-reanimated';
-import { CombinedDarkTheme, CombinedLightTheme } from '@/lib/theme';
+import { AppDarkTheme, AppLightTheme } from '@/lib/theme';
 
 export { ErrorBoundary } from 'expo-router';
 
@@ -24,14 +24,12 @@ export default function RootLayout() {
 
 function RootLayoutNav() {
   const colorScheme = useColorScheme();
-  const paperTheme = colorScheme === 'dark' ? CombinedDarkTheme : CombinedLightTheme;
+  const paperTheme = colorScheme === 'dark' ? AppDarkTheme : AppLightTheme;
 
   return (
     <PaperProvider theme={paperTheme}>
       <Stack>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="post/[id]" options={{ headerShown: false }} />
-        <Stack.Screen name="chat/[id]" options={{ headerShown: false }} />
       </Stack>
     </PaperProvider>
   );
