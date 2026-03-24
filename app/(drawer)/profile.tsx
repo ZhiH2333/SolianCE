@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import UserAvatar from '@/components/common/UserAvatar';
 import { MOCK_USER } from '@/lib/mock/data';
+import { useAuthContext } from '@/lib/auth/auth-context';
 
 const MOCK_IS_ONLINE = true;
 
@@ -197,11 +198,18 @@ function NavListItem({ item }: NavListItemProps) {
 
 function LogoutItem() {
   const theme = useTheme();
+  const { executeSignOut } = useAuthContext();
 
   function handleLogout() {
     Alert.alert('退出登录', '确定要退出登录吗？', [
       { text: '取消', style: 'cancel' },
-      { text: '退出', style: 'destructive', onPress: () => {} },
+      {
+        text: '退出',
+        style: 'destructive',
+        onPress: () => {
+          executeSignOut();
+        },
+      },
     ]);
   }
 
