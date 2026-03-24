@@ -32,6 +32,7 @@ function RootLayoutNav() {
       <PaperProvider theme={paperTheme}>
         <Stack>
           <Stack.Screen name="(drawer)" options={{ headerShown: false }} />
+          <Stack.Screen name="post/[id]" options={{ headerShown: false }} />
         </Stack>
       </PaperProvider>
     </GestureHandlerRootView>

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Alert, FlatList, View } from 'react-native';
 import { DrawerActions } from '@react-navigation/native';
 import { useNavigation } from '@react-navigation/native';
+import { useRouter } from 'expo-router';
 import { Appbar, FAB, useTheme } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import PostCard from '@/components/posts/PostCard';
@@ -9,8 +10,8 @@ import { MOCK_POSTS, type MockPost } from '@/lib/mock/data';
 
 const BOTTOM_NAV_HEIGHT = 80;
 
-function renderPostItem({ item }: { item: MockPost }) {
-  return <PostCard post={item} />;
+function RenderPostItem({ item, onPress }: { item: MockPost; onPress: (id: string) => void }) {
+  return <PostCard post={item} onPress={() => onPress(item.id)} />;
 }
 
 function extractPostKey(item: MockPost): string {
@@ -25,6 +26,7 @@ export default function ExploreScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
+  const router = useRouter();
   const [isFabOpen, setIsFabOpen] = useState(false);
 
   return (
@@ -55,7 +57,9 @@ export default function ExploreScreen() {
 
       <FlatList
         data={MOCK_POSTS}
-        renderItem={renderPostItem}
+        renderItem={({ item }) => (
+          <RenderPostItem item={item} onPress={(id) => router.push(`/post/${id}`)} />
+        )}
         keyExtractor={extractPostKey}
         contentContainerStyle={{ paddingTop: 0 }}
         ListFooterComponent={ListFooter}
