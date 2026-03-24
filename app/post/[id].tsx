@@ -134,7 +134,7 @@ export default function PostDetailScreen() {
   const insets = useSafeAreaInsets();
 
   const post = MOCK_POSTS.find((p) => p.id === id) ?? MOCK_POSTS[0];
-  const comments = MOCK_COMMENTS;
+  const comments = MOCK_COMMENTS.filter((c) => c.postId === post.id);
 
   const [reactions, setReactions] = useState<MockReaction[]>(post.reactions ?? []);
 

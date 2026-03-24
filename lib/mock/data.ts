@@ -70,6 +70,7 @@ export interface MockMessage {
 
 export interface MockComment {
   id: string;
+  postId: string;
   author: MockPostAuthor;
   content: string;
   publishedAt: string;
@@ -134,7 +135,7 @@ export const MOCK_POSTS: MockPost[] = [
     reposts: 3,
     tags: ["SolarNetwork", "Dev"],
     liked: false,
-    commentPreview: "Great work! The new architecture is much faster.",
+    commentPreview: "This is amazing! What kind of performance optimizations did you make?",
     reactions: [
       { emoji: "🚀", label: "太棒了", count: 12, reacted: true },
       { emoji: "❤️", label: "喜欢", count: 8, reacted: false },
@@ -369,20 +370,47 @@ export const MOCK_MESSAGES: MockMessage[] = [
 ];
 
 export const MOCK_COMMENTS: MockComment[] = [
+  // post_001 评论
   {
     id: "comment_001",
+    postId: "post_001",
+    author: {
+      name: "LittleSheep",
+      handle: "@little_sheep",
+      avatar: "https://i.pravatar.cc/150?img=12",
+    },
+    content: "八小时，的确很苦，点赞了🤌😈🫰",
+    publishedAt: "2025-03-21T11:00:00Z",
+    likes: 6,
+  },
+  {
+    id: "comment_002",
+    postId: "post_001",
     author: {
       name: "Akira Tanaka",
       handle: "@akira_dev",
       avatar: "https://i.pravatar.cc/150?img=33",
     },
-    content:
-      "This is amazing! What kind of performance optimizations did you make?",
+    content: "感谢小羊的努力！期待 v3 正式版。",
+    publishedAt: "2025-03-21T11:30:00Z",
+    likes: 4,
+  },
+  // post_002 评论
+  {
+    id: "comment_003",
+    postId: "post_002",
+    author: {
+      name: "Akira Tanaka",
+      handle: "@akira_dev",
+      avatar: "https://i.pravatar.cc/150?img=33",
+    },
+    content: "This is amazing! What kind of performance optimizations did you make?",
     publishedAt: "2025-03-23T09:00:00Z",
     likes: 5,
   },
   {
-    id: "comment_002",
+    id: "comment_004",
+    postId: "post_002",
     author: {
       name: "Maria Chen",
       handle: "@maria_ux",
@@ -393,16 +421,79 @@ export const MOCK_COMMENTS: MockComment[] = [
     likes: 3,
   },
   {
-    id: "comment_003",
+    id: "comment_005",
+    postId: "post_002",
     author: {
       name: "Alex Rivera",
       handle: "@alex_builds",
       avatar: "https://i.pravatar.cc/150?img=57",
     },
-    content:
-      "Would love to contribute to the open source version if you ever plan to release it!",
+    content: "Would love to contribute to the open source version if you ever plan to release it!",
     publishedAt: "2025-03-23T09:30:00Z",
     likes: 8,
+  },
+  // post_004 评论
+  {
+    id: "comment_006",
+    postId: "post_004",
+    author: {
+      name: "DevBot9000",
+      handle: "@devbot9k",
+      avatar: "https://i.pravatar.cc/150?img=68",
+    },
+    content: "The color palette is stunning! 😍",
+    publishedAt: "2025-03-23T07:00:00Z",
+    likes: 12,
+  },
+  {
+    id: "comment_007",
+    postId: "post_004",
+    author: {
+      name: "Alex Rivera",
+      handle: "@alex_builds",
+      avatar: "https://i.pravatar.cc/150?img=57",
+    },
+    content: "Can't wait to see the Figma file!",
+    publishedAt: "2025-03-23T07:20:00Z",
+    likes: 7,
+  },
+  // post_006 评论
+  {
+    id: "comment_008",
+    postId: "post_006",
+    author: {
+      name: "LittleSheep",
+      handle: "@little_sheep",
+      avatar: "https://i.pravatar.cc/150?img=12",
+    },
+    content: "僕は「ダンジョン飯」が一番楽しみ！",
+    publishedAt: "2025-03-23T04:00:00Z",
+    likes: 9,
+  },
+  // post_007 评论
+  {
+    id: "comment_009",
+    postId: "post_007",
+    author: {
+      name: "Maria Chen",
+      handle: "@maria_ux",
+      avatar: "https://i.pravatar.cc/150?img=47",
+    },
+    content: "Congratulations! Keep up the great work! 🎊",
+    publishedAt: "2025-03-22T09:00:00Z",
+    likes: 15,
+  },
+  {
+    id: "comment_010",
+    postId: "post_007",
+    author: {
+      name: "Akira Tanaka",
+      handle: "@akira_dev",
+      avatar: "https://i.pravatar.cc/150?img=33",
+    },
+    content: "一年过得真快，期待下一个里程碑！",
+    publishedAt: "2025-03-22T09:30:00Z",
+    likes: 11,
   },
 ];
 

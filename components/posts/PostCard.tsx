@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Image, View } from 'react-native';
 import { Card, Chip, Divider, IconButton, Surface, Text, useTheme } from 'react-native-paper';
-import type { MockPost, MockReaction } from '@/lib/mock/data';
+import { MOCK_COMMENTS, type MockPost, type MockReaction } from '@/lib/mock/data';
 import PostHeader from './PostHeader';
 
 interface PostCardProps {
@@ -98,6 +98,7 @@ export default function PostCard({ post, onPress }: PostCardProps) {
   );
   const [isExpanded, setIsExpanded] = useState(false);
   const [isTextTruncated, setIsTextTruncated] = useState(false);
+  const firstComment = MOCK_COMMENTS.find((c) => c.postId === post.id);
 
   function toggleReaction(index: number) {
     setReactions((prev) =>
@@ -192,7 +193,7 @@ export default function PostCard({ post, onPress }: PostCardProps) {
           />
         )}
 
-        {(post.comments > 0 || post.commentPreview) && (
+        {(post.comments > 0 || firstComment) && (
           <View
             style={{
               flexDirection: 'row',
@@ -214,7 +215,7 @@ export default function PostCard({ post, onPress }: PostCardProps) {
           </View>
         )}
 
-        {post.commentPreview && (
+        {firstComment && (
           <View
             style={{
               flexDirection: 'row',
@@ -224,8 +225,11 @@ export default function PostCard({ post, onPress }: PostCardProps) {
               marginBottom: 4,
             }}
           >
-            <Text style={{ fontSize: 13, color: theme.colors.onSurfaceVariant }}>
-              {post.commentPreview}
+            <Text
+              numberOfLines={2}
+              style={{ fontSize: 13, color: theme.colors.onSurfaceVariant }}
+            >
+              {firstComment.content}
             </Text>
           </View>
         )}
