@@ -1,17 +1,20 @@
-import { ScrollView, View } from 'react-native';
-import { Appbar, useTheme } from 'react-native-paper';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import SpecialDayCard from '@/components/home/SpecialDayCard';
-import RecommendationCard from '@/components/home/RecommendationCard';
-import CheckInCard from '@/components/home/CheckInCard';
-import NotificationCard from '@/components/home/NotificationCard';
-import TodayNewsCard from '@/components/home/TodayNewsCard';
+import CheckInCard from "@/components/home/CheckInCard";
+import NotificationCard from "@/components/home/NotificationCard";
+import RecommendationCard from "@/components/home/RecommendationCard";
+import SpecialDayCard from "@/components/home/SpecialDayCard";
+import TodayNewsCard from "@/components/home/TodayNewsCard";
+import { DrawerActions } from "@react-navigation/native";
+import { useNavigation } from "@react-navigation/native";
+import { ScrollView, View } from "react-native";
+import { Appbar, useTheme } from "react-native-paper";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const CARD_GAP = 8;
 
 export default function HomeScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
+  const navigation = useNavigation();
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
@@ -19,21 +22,17 @@ export default function HomeScreen() {
         <Appbar.Action
           icon="menu"
           iconColor={theme.colors.onSurface}
-          onPress={() => {}}
+          onPress={() => navigation.dispatch(DrawerActions.openDrawer())}
         />
         <Appbar.Content
           title="首页"
           titleStyle={{
             color: theme.colors.onSurface,
-            fontWeight: '600',
-            textAlign: 'center',
+            fontWeight: "600",
+            textAlign: "center",
           }}
         />
-        <Appbar.Action
-          icon="menu"
-          iconColor="transparent"
-          onPress={() => {}}
-        />
+        <Appbar.Action icon="menu" iconColor="transparent" onPress={() => {}} />
       </Appbar.Header>
 
       <ScrollView
@@ -48,7 +47,7 @@ export default function HomeScreen() {
 
         <RecommendationCard />
 
-        <View style={{ flexDirection: 'row', gap: CARD_GAP }}>
+        <View style={{ flexDirection: "row", gap: CARD_GAP }}>
           <View style={{ flex: 1 }}>
             <CheckInCard />
           </View>

@@ -1,4 +1,6 @@
 import { Alert, ScrollView, View } from 'react-native';
+import { DrawerActions } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
 import { Appbar, Card, Divider, List, Text, TouchableRipple, useTheme } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -240,6 +242,7 @@ function LogoutItem() {
 export default function ProfileScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
+  const navigation = useNavigation();
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
@@ -247,7 +250,7 @@ export default function ProfileScreen() {
         <Appbar.Action
           icon="menu"
           iconColor={theme.colors.onSurface}
-          onPress={() => {}}
+          onPress={() => navigation.dispatch(DrawerActions.openDrawer())}
         />
         <Appbar.Content
           title="账户"

@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { Alert, FlatList, View } from 'react-native';
+import { DrawerActions } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
 import { Appbar, FAB, useTheme } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import PostCard from '@/components/posts/PostCard';
@@ -22,6 +24,7 @@ function ListFooter() {
 export default function ExploreScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
+  const navigation = useNavigation();
   const [isFabOpen, setIsFabOpen] = useState(false);
 
   return (
@@ -30,7 +33,7 @@ export default function ExploreScreen() {
         <Appbar.Action
           icon="menu"
           iconColor={theme.colors.onSurface}
-          onPress={() => {}}
+          onPress={() => navigation.dispatch(DrawerActions.openDrawer())}
         />
         <Appbar.Action
           icon="shuffle-variant"
@@ -63,8 +66,11 @@ export default function ExploreScreen() {
         open={isFabOpen}
         visible
         icon={isFabOpen ? 'close' : 'plus'}
-        style={{ paddingBottom: BOTTOM_NAV_HEIGHT + insets.bottom }}
-        fabStyle={{ backgroundColor: theme.colors.primaryContainer }}
+        style={{
+          bottom: BOTTOM_NAV_HEIGHT + insets.bottom,
+          paddingBottom: 0,
+        }}
+        fabStyle={{ backgroundColor: theme.colors.primaryContainer, marginBottom: 4 }}
         color={theme.colors.onPrimaryContainer}
         actions={[
           {

@@ -5,20 +5,20 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme } from 'react-native-paper';
 
 type IconProps = { color: string; size: number };
-type RouteName = 'index' | 'explore' | 'messaging' | 'profile';
+type RouteName = 'index' | 'explore' | 'messaging' | 'realms';
 
 const TAB_ICONS: Record<RouteName, { default: string; focused: string }> = {
   index: { default: 'home-outline', focused: 'home' },
   explore: { default: 'compass-outline', focused: 'compass' },
   messaging: { default: 'message-text-outline', focused: 'message-text' },
-  profile: { default: 'account-outline', focused: 'account' },
+  realms: { default: 'account-group-outline', focused: 'account-group' },
 };
 
 const TAB_LABELS: Record<RouteName, string> = {
-  index: 'Home',
-  explore: 'Explore',
-  messaging: 'Messages',
-  profile: 'Profile',
+  index: '首页',
+  explore: '探索',
+  messaging: '聊天',
+  realms: '领域',
 };
 
 function renderTabIcon(routeName: string, focused: boolean, color: string): React.ReactNode {
@@ -65,7 +65,8 @@ export default function TabLayout() {
       <Tabs.Screen name="index" />
       <Tabs.Screen name="explore" />
       <Tabs.Screen name="messaging" />
-      <Tabs.Screen name="profile" />
+      <Tabs.Screen name="realms" />
+      <Tabs.Screen name="profile" options={{ href: null }} />
     </Tabs>
   );
 }

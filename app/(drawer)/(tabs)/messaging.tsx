@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { Alert, FlatList, View } from 'react-native';
+import { DrawerActions } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
 import { Appbar, Divider, FAB, useTheme } from 'react-native-paper';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const BOTTOM_NAV_HEIGHT = 80;
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ConversationItem from '@/components/messaging/ConversationItem';
 import { MOCK_CONVERSATIONS, type MockConversation } from '@/lib/mock/data';
 
@@ -22,6 +24,7 @@ function ListFooter() {
 export default function MessagingScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
+  const navigation = useNavigation();
   const [isFabOpen, setIsFabOpen] = useState(false);
 
   function handleConversationPress(conv: MockConversation) {
@@ -43,7 +46,7 @@ export default function MessagingScreen() {
         <Appbar.Action
           icon="menu"
           iconColor={theme.colors.onSurface}
-          onPress={() => {}}
+          onPress={() => navigation.dispatch(DrawerActions.openDrawer())}
         />
         <Appbar.Content
           title="聊天"
@@ -74,8 +77,11 @@ export default function MessagingScreen() {
         open={isFabOpen}
         visible
         icon={isFabOpen ? 'close' : 'plus'}
-        style={{ paddingBottom: BOTTOM_NAV_HEIGHT + insets.bottom }}
-        fabStyle={{ backgroundColor: theme.colors.primaryContainer }}
+        style={{
+          bottom: BOTTOM_NAV_HEIGHT + insets.bottom,
+          paddingBottom: 0,
+        }}
+        fabStyle={{ backgroundColor: theme.colors.primaryContainer, marginBottom: 4 }}
         color={theme.colors.onPrimaryContainer}
         actions={[
           {
