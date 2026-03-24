@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { Alert, FlatList, View } from 'react-native';
 import { Appbar, Divider, FAB, useTheme } from 'react-native-paper';
+
+const BOTTOM_NAV_HEIGHT = 80;
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ConversationItem from '@/components/messaging/ConversationItem';
 import { MOCK_CONVERSATIONS, type MockConversation } from '@/lib/mock/data';
@@ -72,11 +74,7 @@ export default function MessagingScreen() {
         open={isFabOpen}
         visible
         icon={isFabOpen ? 'close' : 'plus'}
-        style={{
-          position: 'absolute',
-          right: 0,
-          bottom: insets.bottom,
-        }}
+        style={{ paddingBottom: BOTTOM_NAV_HEIGHT + insets.bottom }}
         fabStyle={{ backgroundColor: theme.colors.primaryContainer }}
         color={theme.colors.onPrimaryContainer}
         actions={[
