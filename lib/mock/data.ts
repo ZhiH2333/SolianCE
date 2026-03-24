@@ -53,8 +53,10 @@ export interface MockConversation {
   isGroup: boolean;
   avatar: string;
   lastMessage: string;
+  lastMessageSender: string;
   lastMessageTime: string;
   unread: number;
+  isEncrypted?: boolean;
 }
 
 export interface MockMessage {
@@ -271,6 +273,7 @@ export const MOCK_CONVERSATIONS: MockConversation[] = [
     isGroup: true,
     avatar: 'https://i.pravatar.cc/150?img=50',
     lastMessage: 'Anyone up for a code review session?',
+    lastMessageSender: 'Alex',
     lastMessageTime: '2025-03-23T09:00:00Z',
     unread: 3,
   },
@@ -280,6 +283,7 @@ export const MOCK_CONVERSATIONS: MockConversation[] = [
     isGroup: false,
     avatar: 'https://i.pravatar.cc/150?img=33',
     lastMessage: 'Thanks for the PR review!',
+    lastMessageSender: 'Akira',
     lastMessageTime: '2025-03-23T08:45:00Z',
     unread: 0,
   },
@@ -289,6 +293,7 @@ export const MOCK_CONVERSATIONS: MockConversation[] = [
     isGroup: true,
     avatar: 'https://i.pravatar.cc/150?img=60',
     lastMessage: 'Maria shared a new Figma file',
+    lastMessageSender: 'Maria',
     lastMessageTime: '2025-03-23T08:10:00Z',
     unread: 7,
   },
@@ -298,6 +303,7 @@ export const MOCK_CONVERSATIONS: MockConversation[] = [
     isGroup: false,
     avatar: 'https://i.pravatar.cc/150?img=44',
     lastMessage: 'Check out my new generative art!',
+    lastMessageSender: 'Luna',
     lastMessageTime: '2025-03-23T07:30:00Z',
     unread: 1,
   },
@@ -306,9 +312,21 @@ export const MOCK_CONVERSATIONS: MockConversation[] = [
     name: 'ACG Fans',
     isGroup: true,
     avatar: 'https://i.pravatar.cc/150?img=55',
-    lastMessage: 'Yuki: 今期のおすすめは？',
-    lastMessageTime: '2025-03-23T06:00:00Z',
+    lastMessage: '今期のおすすめは？',
+    lastMessageSender: 'Yuki',
+    lastMessageTime: '2025-03-22T18:00:00Z',
     unread: 0,
+  },
+  {
+    id: 'conv_006',
+    name: 'Thomas Wright',
+    isGroup: false,
+    avatar: 'https://i.pravatar.cc/150?img=70',
+    lastMessage: 'The Kubernetes migration went smoothly!',
+    lastMessageSender: 'Thomas',
+    lastMessageTime: '2025-03-22T22:00:00Z',
+    unread: 0,
+    isEncrypted: true,
   },
 ];
 
