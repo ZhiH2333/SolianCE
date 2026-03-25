@@ -2,7 +2,9 @@ import { useState } from 'react';
 import type { ReactElement } from 'react';
 import { View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Appbar, Button, Card, Text, useTheme } from 'react-native-paper';
+import { ActivityIndicator, Appbar, Button, Text } from 'react-native-paper';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { V3_AUTH, V3_PILL_RADIUS } from '@/lib/auth/v3-auth-theme';
 
 function generateMockCaptchaToken(): string {
   const randomPart: string = Math.random().toString(36).slice(2);
@@ -10,18 +12,15 @@ function generateMockCaptchaToken(): string {
 }
 
 export default function CaptchaScreen(): ReactElement {
-  const theme = useTheme();
+  const insets = useSafeAreaInsets();
   const router = useRouter();
-  const [captchaToken, setCaptchaToken] = useState<string>('');
   const [isCompletingCaptcha, setIsCompletingCaptcha] = useState<boolean>(false);
 
   async function executeCompleteCaptcha(): Promise<void> {
     setIsCompletingCaptcha(true);
     try {
-      // mock: 模拟完成验证并获取 captcha_tk
       await new Promise<void>((resolve) => setTimeout(resolve, 500));
       const token: string = generateMockCaptchaToken();
-      setCaptchaToken(token);
       router.replace(`/auth/register?captchaToken=${encodeURIComponent(token)}` as any);
     } finally {
       setIsCompletingCaptcha(false);
@@ -29,40 +28,46 @@ export default function CaptchaScreen(): ReactElement {
   }
 
   return (
-    <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
-      <Appbar.Header style={{ backgroundColor: theme.colors.surface }}>
+    <View style={{ flex: 1, backgroundColor: V3_AUTH.pageBg, paddingTop: insets.top }}>
+      <Appbar.Header mode="center-aligned" style={{ backgroundColor: V3_AUTH.pageBg, elevation: 0 }}>
         <Appbar.BackAction onPress={() => router.back()} />
-        <Appbar.Content title="Captcha" />
+        <Appbar.Content title="Anti-Robot" titleStyle={{ fontWeight: '600', color: V3_AUTH.textPrimary }} />
       </Appbar.Header>
-      <View style={{ padding: 16 }}>
-        <Card mode="elevated" style={{ borderRadius: 16, overflow: 'hidden' }}>
-          <Card.Content style={{ gap: 12 }}>
-            <Text variant="bodyMedium">按 v2：完成 reCaptcha 验证后回传 `captcha_tk`（当前为 mock 流程）。</Text>
-            <View
-              style={{
-                height: 240,
-                borderRadius: 14,
-                borderWidth: 1,
-                borderColor: theme.colors.outlineVariant,
-                backgroundColor: theme.colors.surfaceVariant,
-                alignItems: 'center',
-                justifyContent: 'center',
-                padding: 12,
-              }}
-            >
-              <Text variant="bodySmall">Captcha WebView 区域（mock）</Text>
-            </View>
-            <Button
-              mode="contained"
-              onPress={executeCompleteCaptcha}
-              loading={isCompletingCaptcha}
-              disabled={isCompletingCaptcha}
-            >
-              完成验证码
-            </Button>
-            {captchaToken ? <Text variant="bodySmall">captcha_tk 已生成：{captchaToken}</Text> : null}
-          </Card.Content>
-        </Card>
+      <View style={{ flex: 1, paddingHorizontal: 20, paddingTop: 16 }}>
+        <Text variant="bodyMedium" style={{ color: V3_AUTH.textMuted, marginBottom: 16, lineHeight: 22 }}>
+          Complete the verification below (mock WebView area). After verification, you will return to create your account.
+        </Text>
+        <View
+          style={{
+            flex: 1,
+            minHeight: 280,
+            borderRadius: V3_PILL_RADIUS,
+            borderWidth: 1,
+            borderColor: V3_AUTH.inputBorder,
+            backgroundColor: '#FFFFFF',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 16,
+          }}
+        >
+          {isCompletingCaptcha ? (
+            <ActivityIndicator size="large" color={V3_AUTH.tealDark} />
+          ) : (
+            <Text style={{ color: V3_AUTH.textMuted, textAlign: 'center' }}>Captcha puzzle (mock)</Text>
+          )}
+        </View>
+        <Button
+          mode="contained"
+          onPress={executeCompleteCaptcha}
+          loading={isCompletingCaptcha}
+          disabled={isCompletingCaptcha}
+          buttonColor={V3_AUTH.tealDark}
+          textColor="#FFFFFF"
+          style={{ marginTop: 20, borderRadius: V3_PILL_RADIUS }}
+          contentStyle={{ paddingVertical: 8 }}
+        >
+          Complete verification
+        </Button>
       </View>
     </View>
   );
