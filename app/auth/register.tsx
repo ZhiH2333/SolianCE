@@ -4,7 +4,7 @@ import { Alert, Linking, Pressable, ScrollView, View } from 'react-native';
 import { Link, useLocalSearchParams, useRouter } from 'expo-router';
 import { ActivityIndicator, Appbar, Checkbox, Text, TextInput, TouchableRipple } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { clearRegisterDraft, peekRegisterDraft, saveRegisterDraft } from '@/lib/auth/register-draft';
 import { V3_AUTH, V3_ICON_CIRCLE_SIZE, V3_PILL_RADIUS } from '@/lib/auth/v3-auth-theme';
 
@@ -131,17 +131,23 @@ export default function RegisterScreen(): ReactElement {
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: V3_AUTH.pageBg, paddingTop: insets.top }}>
-      <Appbar.Header mode="center-aligned" style={{ backgroundColor: V3_AUTH.pageBg, elevation: 0 }}>
-        <Appbar.BackAction onPress={() => (step > 0 ? setStep((s) => (s - 1) as RegisterStep) : router.back())} />
-        <Appbar.Content
-          title={stepTitles[step]}
-          titleStyle={{ fontWeight: '600', color: V3_AUTH.textPrimary, fontSize: 17 }}
-        />
-      </Appbar.Header>
-      <View style={{ height: 3, backgroundColor: V3_AUTH.progressTrack }}>
-        <View style={{ height: 3, width: `${Math.max(0.08, progress) * 100}%`, backgroundColor: V3_AUTH.progressActive }} />
-      </View>
+    <View style={{ flex: 1, backgroundColor: V3_AUTH.pageBg }}>
+      <SafeAreaView edges={['top']} style={{ backgroundColor: V3_AUTH.pageBg }}>
+        <Appbar.Header
+          mode="center-aligned"
+          style={{ backgroundColor: V3_AUTH.pageBg, elevation: 0, marginTop: 0 }}
+          statusBarHeight={0}
+        >
+          <Appbar.BackAction onPress={() => (step > 0 ? setStep((s) => (s - 1) as RegisterStep) : router.back())} />
+          <Appbar.Content
+            title={stepTitles[step]}
+            titleStyle={{ fontWeight: '600', color: V3_AUTH.textPrimary, fontSize: 17 }}
+          />
+        </Appbar.Header>
+        <View style={{ height: 3, backgroundColor: V3_AUTH.progressTrack }}>
+          <View style={{ height: 3, width: `${Math.max(0.08, progress) * 100}%`, backgroundColor: V3_AUTH.progressActive }} />
+        </View>
+      </SafeAreaView>
 
       <ScrollView
         contentContainerStyle={{

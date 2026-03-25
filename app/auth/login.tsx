@@ -11,7 +11,7 @@ import {
   TouchableRipple,
 } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { AuthFactor } from '@/lib/api/types';
 import type { TokenPair } from '@/lib/api/types';
 import { useAuthContext } from '@/lib/auth/auth-context';
@@ -141,23 +141,26 @@ export default function LoginScreen(): ReactElement {
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: V3_AUTH.pageBg, paddingTop: insets.top }}>
-      <Appbar.Header
-        mode="center-aligned"
-        style={{ backgroundColor: V3_AUTH.pageBg, elevation: 0 }}
-      >
-        <Appbar.BackAction onPress={() => router.back()} />
-        <Appbar.Content title="Login" titleStyle={{ fontWeight: '600', color: V3_AUTH.textPrimary }} />
-      </Appbar.Header>
-      <View style={{ height: 3, backgroundColor: V3_AUTH.progressTrack }}>
-        <View
-          style={{
-            height: 3,
-            width: `${loginProgressForStep(step) * 100}%`,
-            backgroundColor: V3_AUTH.progressActive,
-          }}
-        />
-      </View>
+    <View style={{ flex: 1, backgroundColor: V3_AUTH.pageBg }}>
+      <SafeAreaView edges={['top']} style={{ backgroundColor: V3_AUTH.pageBg }}>
+        <Appbar.Header
+          mode="center-aligned"
+          style={{ backgroundColor: V3_AUTH.pageBg, elevation: 0, marginTop: 0 }}
+          statusBarHeight={0}
+        >
+          <Appbar.BackAction onPress={() => router.back()} />
+          <Appbar.Content title="Login" titleStyle={{ fontWeight: '600', color: V3_AUTH.textPrimary }} />
+        </Appbar.Header>
+        <View style={{ height: 3, backgroundColor: V3_AUTH.progressTrack }}>
+          <View
+            style={{
+              height: 3,
+              width: `${loginProgressForStep(step) * 100}%`,
+              backgroundColor: V3_AUTH.progressActive,
+            }}
+          />
+        </View>
+      </SafeAreaView>
 
       <ScrollView
         contentContainerStyle={{
@@ -317,28 +320,32 @@ export default function LoginScreen(): ReactElement {
                   <TouchableRipple
                     key={factor.id}
                     onPress={() => setSelectedFactor(factor)}
-                    style={{
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      paddingHorizontal: 14,
-                      paddingVertical: 12,
-                      borderRadius: V3_PILL_RADIUS,
-                    }}
+                    borderless={false}
                   >
-                    <MaterialCommunityIcons
-                      name="form-textbox-password"
-                      size={22}
-                      color={V3_AUTH.tealDark}
-                      style={{ marginRight: 12 }}
-                    />
-                    <Text style={{ flex: 1, fontSize: 16, fontWeight: '600', color: V3_AUTH.textPrimary }}>
-                      {getFactorLabelEn(factor.type)}
-                    </Text>
-                    <Checkbox.Android
-                      status={checked ? 'checked' : 'unchecked'}
-                      onPress={() => setSelectedFactor(factor)}
-                      color={V3_AUTH.tealDark}
-                    />
+                    <View
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        paddingHorizontal: 14,
+                        paddingVertical: 12,
+                        borderRadius: V3_PILL_RADIUS,
+                      }}
+                    >
+                      <MaterialCommunityIcons
+                        name="form-textbox-password"
+                        size={22}
+                        color={V3_AUTH.tealDark}
+                        style={{ marginRight: 12 }}
+                      />
+                      <Text style={{ flex: 1, fontSize: 16, fontWeight: '600', color: V3_AUTH.textPrimary }}>
+                        {getFactorLabelEn(factor.type)}
+                      </Text>
+                      <Checkbox.Android
+                        status={checked ? 'checked' : 'unchecked'}
+                        onPress={() => setSelectedFactor(factor)}
+                        color={V3_AUTH.tealDark}
+                      />
+                    </View>
                   </TouchableRipple>
                 );
               })}

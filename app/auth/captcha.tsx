@@ -3,7 +3,7 @@ import type { ReactElement } from 'react';
 import { View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { ActivityIndicator, Appbar, Button, Text } from 'react-native-paper';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { V3_AUTH, V3_PILL_RADIUS } from '@/lib/auth/v3-auth-theme';
 
 function generateMockCaptchaToken(): string {
@@ -28,12 +28,18 @@ export default function CaptchaScreen(): ReactElement {
   }
 
   return (
-    <View style={{ flex: 1, backgroundColor: V3_AUTH.pageBg, paddingTop: insets.top }}>
-      <Appbar.Header mode="center-aligned" style={{ backgroundColor: V3_AUTH.pageBg, elevation: 0 }}>
-        <Appbar.BackAction onPress={() => router.back()} />
-        <Appbar.Content title="Anti-Robot" titleStyle={{ fontWeight: '600', color: V3_AUTH.textPrimary }} />
-      </Appbar.Header>
-      <View style={{ flex: 1, paddingHorizontal: 20, paddingTop: 16 }}>
+    <View style={{ flex: 1, backgroundColor: V3_AUTH.pageBg }}>
+      <SafeAreaView edges={['top']} style={{ backgroundColor: V3_AUTH.pageBg }}>
+        <Appbar.Header
+          mode="center-aligned"
+          style={{ backgroundColor: V3_AUTH.pageBg, elevation: 0, marginTop: 0 }}
+          statusBarHeight={0}
+        >
+          <Appbar.BackAction onPress={() => router.back()} />
+          <Appbar.Content title="Anti-Robot" titleStyle={{ fontWeight: '600', color: V3_AUTH.textPrimary }} />
+        </Appbar.Header>
+      </SafeAreaView>
+      <View style={{ flex: 1, paddingHorizontal: 20, paddingTop: 16, paddingBottom: insets.bottom + 16 }}>
         <Text variant="bodyMedium" style={{ color: V3_AUTH.textMuted, marginBottom: 16, lineHeight: 22 }}>
           Complete the verification below (mock WebView area). After verification, you will return to create your account.
         </Text>
