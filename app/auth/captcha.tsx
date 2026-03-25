@@ -1,36 +1,31 @@
 import { useState } from 'react';
-import { Alert, Linking, View } from 'react-native';
+import type { ReactElement } from 'react';
+import { View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Appbar, Button, Card, Text, TextInput, useTheme } from 'react-native-paper';
-import { getCaptchaBaseUrl } from '@/lib/api/client';
+import { Appbar, Button, Card, Text, useTheme } from 'react-native-paper';
 
-export default function CaptchaScreen(): JSX.Element {
+function generateMockCaptchaToken(): string {
+  const randomPart: string = Math.random().toString(36).slice(2);
+  return `mock_captcha_tk.${Date.now()}.${randomPart}`;
+}
+
+export default function CaptchaScreen(): ReactElement {
   const theme = useTheme();
   const router = useRouter();
-  const [captchaUrl, setCaptchaUrl] = useState<string>('');
   const [captchaToken, setCaptchaToken] = useState<string>('');
-  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [isCompletingCaptcha, setIsCompletingCaptcha] = useState<boolean>(false);
 
-  async function executeLoadCaptchaUrl(): Promise<void> {
-    setIsLoading(true);
+  async function executeCompleteCaptcha(): Promise<void> {
+    setIsCompletingCaptcha(true);
     try {
-      const baseUrl: string = await getCaptchaBaseUrl();
-      const url: string = `${baseUrl}/auth/captcha`;
-      setCaptchaUrl(url);
-      await Linking.openURL(url);
-    } catch (error) {
-      Alert.alert('加载失败', error instanceof Error ? error.message : '无法获取 Captcha 地址');
+      // mock: 模拟完成验证并获取 captcha_tk
+      await new Promise<void>((resolve) => setTimeout(resolve, 500));
+      const token: string = generateMockCaptchaToken();
+      setCaptchaToken(token);
+      router.replace(`/auth/register?captchaToken=${encodeURIComponent(token)}` as any);
     } finally {
-      setIsLoading(false);
+      setIsCompletingCaptcha(false);
     }
-  }
-
-  function executeCopyTip(): void {
-    if (!captchaToken.trim()) {
-      Alert.alert('提示', '请先输入 token。');
-      return;
-    }
-    Alert.alert('已记录', '请手动复制该 token 到登录/注册页面。');
   }
 
   return (
@@ -42,20 +37,30 @@ export default function CaptchaScreen(): JSX.Element {
       <View style={{ padding: 16 }}>
         <Card mode="elevated">
           <Card.Content style={{ gap: 12 }}>
-            <Text variant="bodyMedium">按 v3 流程，先打开 `/auth/captcha` 页面完成验证，再把 `captcha_tk` 填入登录或注册流程。</Text>
-            <Button mode="contained" onPress={executeLoadCaptchaUrl} loading={isLoading} disabled={isLoading}>
-              打开验证码页面
+            <Text variant="bodyMedium">按 v2：完成 reCaptcha 验证后回传 `captcha_tk`（当前为 mock 流程）。</Text>
+            <View
+              style={{
+                height: 240,
+                borderRadius: 14,
+                borderWidth: 1,
+                borderColor: theme.colors.outlineVariant,
+                backgroundColor: theme.colors.surfaceVariant,
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: 12,
+              }}
+            >
+              <Text variant="bodySmall">Captcha WebView 区域（mock）</Text>
+            </View>
+            <Button
+              mode="contained"
+              onPress={executeCompleteCaptcha}
+              loading={isCompletingCaptcha}
+              disabled={isCompletingCaptcha}
+            >
+              完成验证码
             </Button>
-            {captchaUrl ? <Text variant="bodySmall">当前地址：{captchaUrl}</Text> : null}
-            <TextInput
-              label="粘贴 captcha_tk"
-              value={captchaToken}
-              onChangeText={setCaptchaToken}
-              autoCapitalize="none"
-            />
-            <Button mode="contained-tonal" onPress={executeCopyTip}>
-              我已复制 Token
-            </Button>
+            {captchaToken ? <Text variant="bodySmall">captcha_tk 已生成：{captchaToken}</Text> : null}
           </Card.Content>
         </Card>
       </View>

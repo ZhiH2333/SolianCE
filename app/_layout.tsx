@@ -2,6 +2,7 @@ import { Stack } from 'expo-router';
 import { usePathname, useRouter } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
+import type { ReactElement } from 'react';
 import { useColorScheme } from 'react-native';
 import { PaperProvider } from 'react-native-paper';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -40,7 +41,7 @@ function RootLayoutNav() {
   );
 }
 
-function AuthGate(): JSX.Element {
+function AuthGate(): ReactElement {
   const router = useRouter();
   const pathname = usePathname();
   const { isHydrating, isAuthenticated } = useAuthContext();
