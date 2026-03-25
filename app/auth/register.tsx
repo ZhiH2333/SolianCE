@@ -83,7 +83,7 @@ export default function RegisterScreen(): ReactElement {
         <Appbar.Content title="创建账号" />
       </Appbar.Header>
       <ScrollView contentContainerStyle={{ padding: 16, gap: 12 }}>
-        <Card mode="elevated">
+        <Card mode="elevated" style={{ borderRadius: 16, overflow: 'hidden' }}>
           <Card.Content style={{ gap: 12 }}>
             <TextInput label="用户名" value={name} onChangeText={setName} autoCapitalize="none" />
             <TextInput label="昵称" value={nick} onChangeText={setNick} />

@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import type { ReactElement } from 'react';
 import { Alert, ScrollView, View } from 'react-native';
 import { Link, useRouter } from 'expo-router';
-import { ActivityIndicator, Appbar, Button, Card, HelperText, Text, TextInput, useTheme } from 'react-native-paper';
+import { ActivityIndicator, Appbar, Button, Card, HelperText, Text, TextInput, TouchableRipple, useTheme } from 'react-native-paper';
 import type { AuthFactor } from '@/lib/api/types';
 import type { TokenPair } from '@/lib/api/types';
 import { useAuthContext } from '@/lib/auth/auth-context';
@@ -41,6 +41,54 @@ function createMockFactors(): AuthFactor[] {
   ];
 }
 
+interface FactorRowProps {
+  factor: AuthFactor;
+  isSelected: boolean;
+  isDisabled: boolean;
+  onPress: (factor: AuthFactor) => void;
+}
+
+function FactorRow({ factor, isSelected, isDisabled, onPress }: FactorRowProps): ReactElement {
+  const theme = useTheme();
+  return (
+    <TouchableRipple
+      onPress={() => onPress(factor)}
+      disabled={isDisabled}
+      rippleColor={theme.colors.primary + '22'}
+      style={{
+        borderRadius: 12,
+        paddingHorizontal: 12,
+        paddingVertical: 10,
+        marginVertical: 4,
+        borderWidth: isSelected ? 0 : 1,
+        borderColor: isSelected ? 'transparent' : theme.colors.outline,
+        backgroundColor: isSelected ? theme.colors.secondaryContainer : theme.colors.surfaceVariant,
+      }}
+    >
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+        <Text
+          variant="bodyLarge"
+          style={{
+            color: isSelected ? theme.colors.onSecondaryContainer : theme.colors.onSurfaceVariant,
+            fontWeight: '600',
+          }}
+        >
+          {getFactorLabel(factor.type)}
+        </Text>
+        <Text
+          variant="labelLarge"
+          style={{
+            color: isSelected ? theme.colors.primary : theme.colors.outline,
+            fontWeight: '700',
+          }}
+        >
+          {isSelected ? '已选择' : ''}
+        </Text>
+      </View>
+    </TouchableRipple>
+  );
+}
+
 export default function LoginScreen(): ReactElement {
   const theme = useTheme();
   const router = useRouter();
@@ -50,7 +98,6 @@ export default function LoginScreen(): ReactElement {
   const [challengeId, setChallengeId] = useState<string>('');
   const [stepRemain, setStepRemain] = useState<number>(0);
   const [factors, setFactors] = useState<AuthFactor[]>([]);
-  const [usedFactorIds, setUsedFactorIds] = useState<number[]>([]);
   const [selectedFactor, setSelectedFactor] = useState<AuthFactor | null>(null);
   const [secret, setSecret] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
@@ -77,7 +124,6 @@ export default function LoginScreen(): ReactElement {
       setChallengeId(mockChallengeId);
       setStepRemain(mockStepRemain);
       setFactors(items);
-      setUsedFactorIds([]);
       setSelectedFactor(null);
       setSecret('');
 
@@ -99,7 +145,6 @@ export default function LoginScreen(): ReactElement {
     try {
       setSelectedFactor(item);
       setSecret('');
-      setUsedFactorIds((prev) => (prev.includes(item.id) ? prev : [...prev, item.id]));
       setStep('verify');
     } catch (error) {
       Alert.alert('选择因子失败', error instanceof Error ? error.message : '触发认证因子失败');
@@ -142,7 +187,7 @@ export default function LoginScreen(): ReactElement {
         <Appbar.Content title="登录" />
       </Appbar.Header>
       <ScrollView contentContainerStyle={{ padding: 16, gap: 12 }}>
-        <Card mode="elevated">
+        <Card mode="elevated" style={{ borderRadius: 16, overflow: 'hidden' }}>
           <Card.Content style={{ gap: 12 }}>
             {step === 'lookup' && (
               <>
@@ -158,16 +203,17 @@ export default function LoginScreen(): ReactElement {
               <>
                 <Text variant="titleMedium">选择认证因子</Text>
                 <HelperText type="info">剩余认证步骤：{stepRemain}</HelperText>
-                {factors.map((factor) => (
-                  <Button
-                    key={`${factor.id}-${factor.type}`}
-                    mode={selectedFactor?.id === factor.id ? 'contained' : 'outlined'}
-                    onPress={() => executeChooseFactor(factor)}
-                    disabled={isSubmitting || usedFactorIds.includes(factor.id)}
-                  >
-                    {getFactorLabel(factor.type)}
-                  </Button>
-                ))}
+                <View style={{ flexDirection: 'column' }}>
+                  {factors.map((factor) => (
+                    <FactorRow
+                      key={`${factor.id}-${factor.type}`}
+                      factor={factor}
+                      isSelected={selectedFactor?.id === factor.id}
+                      isDisabled={isSubmitting}
+                      onPress={executeChooseFactor}
+                    />
+                  ))}
+                </View>
               </>
             )}
 

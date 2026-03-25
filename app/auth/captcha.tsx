@@ -35,7 +35,7 @@ export default function CaptchaScreen(): ReactElement {
         <Appbar.Content title="Captcha" />
       </Appbar.Header>
       <View style={{ padding: 16 }}>
-        <Card mode="elevated">
+        <Card mode="elevated" style={{ borderRadius: 16, overflow: 'hidden' }}>
           <Card.Content style={{ gap: 12 }}>
             <Text variant="bodyMedium">按 v2：完成 reCaptcha 验证后回传 `captcha_tk`（当前为 mock 流程）。</Text>
             <View
