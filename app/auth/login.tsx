@@ -3,6 +3,7 @@ import type { ReactElement } from 'react';
 import { Alert, ScrollView, View } from 'react-native';
 import { Link, useRouter } from 'expo-router';
 import { ActivityIndicator, Appbar, Button, Card, HelperText, Text, TextInput, TouchableRipple, useTheme } from 'react-native-paper';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import type { AuthFactor } from '@/lib/api/types';
 import type { TokenPair } from '@/lib/api/types';
 import { useAuthContext } from '@/lib/auth/auth-context';
@@ -50,6 +51,9 @@ interface FactorRowProps {
 
 function FactorRow({ factor, isSelected, isDisabled, onPress }: FactorRowProps): ReactElement {
   const theme = useTheme();
+  const checkboxIconName: string = isSelected ? 'checkbox-marked' : 'checkbox-blank-outline';
+  const iconName: string =
+    factor.type === 0 ? 'lock' : factor.type === 3 ? 'timer-outline' : factor.type === 4 ? 'credit-card-outline' : 'help';
   return (
     <TouchableRipple
       onPress={() => onPress(factor)}
@@ -60,30 +64,23 @@ function FactorRow({ factor, isSelected, isDisabled, onPress }: FactorRowProps):
         paddingHorizontal: 12,
         paddingVertical: 10,
         marginVertical: 4,
-        borderWidth: isSelected ? 0 : 1,
-        borderColor: isSelected ? 'transparent' : theme.colors.outline,
-        backgroundColor: isSelected ? theme.colors.secondaryContainer : theme.colors.surfaceVariant,
+        borderWidth: 1,
+        borderColor: isSelected ? 'transparent' : theme.colors.outlineVariant,
+        backgroundColor: theme.colors.surfaceVariant,
       }}
     >
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-        <Text
-          variant="bodyLarge"
-          style={{
-            color: isSelected ? theme.colors.onSecondaryContainer : theme.colors.onSurfaceVariant,
-            fontWeight: '600',
-          }}
-        >
-          {getFactorLabel(factor.type)}
-        </Text>
-        <Text
-          variant="labelLarge"
-          style={{
-            color: isSelected ? theme.colors.primary : theme.colors.outline,
-            fontWeight: '700',
-          }}
-        >
-          {isSelected ? '已选择' : ''}
-        </Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+          <MaterialCommunityIcons name={iconName as any} size={18} color={theme.colors.onSurfaceVariant} />
+          <Text variant="bodyLarge" style={{ color: theme.colors.onSurface, fontWeight: '600' }}>
+            {getFactorLabel(factor.type)}
+          </Text>
+        </View>
+        <MaterialCommunityIcons
+          name={checkboxIconName as any}
+          size={20}
+          color={isSelected ? theme.colors.primary : theme.colors.outline}
+        />
       </View>
     </TouchableRipple>
   );
@@ -118,7 +115,7 @@ export default function LoginScreen(): ReactElement {
         return;
       }
       const mockChallengeId: string = createMockChallengeId(account.trim());
-      const mockStepRemain: number = 2;
+      const mockStepRemain: number = 1;
       const items: AuthFactor[] = createMockFactors();
 
       setChallengeId(mockChallengeId);
@@ -159,17 +156,9 @@ export default function LoginScreen(): ReactElement {
     }
     setIsSubmitting(true);
     try {
-      // mock: 模拟“检查凭据 -> 还没完成则回到选因子；完成则换取 OIDC token”
+      // mock: 验证当前选中的因子一次即可完成登录（不再进入多轮校验）
       await new Promise<void>((resolve) => setTimeout(resolve, 650));
-
-      const nextRemain: number = Math.max(0, stepRemain - 1);
-      setStepRemain(nextRemain);
-      if (nextRemain > 0) {
-        setStep('factor');
-        setSelectedFactor(null);
-        setSecret('');
-        return;
-      }
+      setStepRemain(0);
 
       const pair: TokenPair = createMockTokenPair();
       await executeSignIn(pair);
@@ -202,7 +191,9 @@ export default function LoginScreen(): ReactElement {
             {step === 'factor' && (
               <>
                 <Text variant="titleMedium">选择认证因子</Text>
-                <HelperText type="info">剩余认证步骤：{stepRemain}</HelperText>
+                <HelperText type="info">
+                  {stepRemain === 1 ? '1 step left' : `${stepRemain} steps left`}
+                </HelperText>
                 <View style={{ flexDirection: 'column' }}>
                   {factors.map((factor) => (
                     <FactorRow
@@ -219,12 +210,14 @@ export default function LoginScreen(): ReactElement {
 
             {step === 'verify' && (
               <>
-                <Text variant="titleMedium">输入验证信息</Text>
+                <Text variant="titleMedium">
+                  {selectedFactor?.type === 0 ? 'Enter the code' : 'Enter the code'}
+                </Text>
                 <HelperText type="info">
-                  当前因子：{selectedFactor ? getFactorLabel(selectedFactor.type) : '未选择'}
+                  {selectedFactor?.type === 0 ? 'The password you set when you registered.' : 'Enter the code provided by your factor.'}
                 </HelperText>
                 <TextInput
-                  label={selectedFactor?.type === 0 ? '密码' : '验证码 / PIN'}
+                  label={selectedFactor?.type === 0 ? 'Password' : selectedFactor?.type === 4 ? 'PIN' : 'Code'}
                   value={secret}
                   onChangeText={setSecret}
                   secureTextEntry={selectedFactor?.type === 0}
