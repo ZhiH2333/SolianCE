@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ReactElement } from 'react';
 import { Alert, View } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -7,14 +7,22 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import type { WebViewMessageEvent, WebViewNavigation } from 'react-native-webview';
 import { WebView } from 'react-native-webview';
 import { fetchPublicSiteBaseUrl } from '@/lib/api/http-client';
-import { REGISTER_CAPTCHA_REDIRECT_URI } from '@/lib/auth/captcha-constants';
+import { buildRegisterCaptchaRedirectUri } from '@/lib/auth/captcha-constants';
 import { extractCaptchaTokenFromNavigationUrl, extractCaptchaTokenFromPostMessage } from '@/lib/auth/captcha-token';
 import { V3_AUTH, V3_PILL_RADIUS } from '@/lib/auth/v3-auth-theme';
 
 function buildCaptchaPageUri(siteBaseUrl: string): string {
   const base: string = siteBaseUrl.replace(/\/$/, '');
-  const redirect: string = encodeURIComponent(REGISTER_CAPTCHA_REDIRECT_URI);
+  const redirect: string = encodeURIComponent(buildRegisterCaptchaRedirectUri(siteBaseUrl));
   return `${base}/auth/captcha?redirect_uri=${redirect}`;
+}
+
+function isLikelyCaptchaReturnUrl(url: string, siteBaseNormalized: string): boolean {
+  if (!url.includes('captcha_tk=')) {
+    return false;
+  }
+  const origin: string = siteBaseNormalized.replace(/\/$/, '');
+  return url.startsWith(`${origin}/`) || url.startsWith(`${origin}?`) || url === origin;
 }
 
 export default function CaptchaScreen(): ReactElement {
@@ -22,6 +30,8 @@ export default function CaptchaScreen(): ReactElement {
   const router = useRouter();
   const [captchaUri, setCaptchaUri] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const siteBaseRef = useRef<string>('');
+  const handledTokenRef = useRef<boolean>(false);
 
   useEffect(() => {
     let cancelled: boolean = false;
@@ -29,6 +39,8 @@ export default function CaptchaScreen(): ReactElement {
       try {
         const siteBase: string = await fetchPublicSiteBaseUrl();
         if (!cancelled) {
+          siteBaseRef.current = siteBase;
+          handledTokenRef.current = false;
           setCaptchaUri(buildCaptchaPageUri(siteBase));
         }
       } catch (err) {
@@ -48,14 +60,41 @@ export default function CaptchaScreen(): ReactElement {
       if (!trimmed) {
         return;
       }
+      if (handledTokenRef.current) {
+        return;
+      }
+      handledTokenRef.current = true;
       router.replace(`/auth/register?captchaToken=${encodeURIComponent(trimmed)}` as any);
     },
     [router],
   );
 
+  const tryConsumeCaptchaRedirect = useCallback(
+    (url: string): boolean => {
+      const base: string = siteBaseRef.current;
+      if (!base) {
+        return false;
+      }
+      if (!isLikelyCaptchaReturnUrl(url, base)) {
+        return false;
+      }
+      const token: string | null = extractCaptchaTokenFromNavigationUrl(url);
+      if (token) {
+        executeReturnWithToken(token);
+        return true;
+      }
+      Alert.alert('Verification', 'Could not read captcha token from redirect.');
+      return true;
+    },
+    [executeReturnWithToken],
+  );
+
   const handleShouldStartLoadWithRequest = useCallback(
     (request: WebViewNavigation): boolean => {
       const url: string = request.url;
+      if (tryConsumeCaptchaRedirect(url)) {
+        return false;
+      }
       if (url.startsWith('soliance://')) {
         const token: string | null = extractCaptchaTokenFromNavigationUrl(url);
         if (token) {
@@ -67,7 +106,7 @@ export default function CaptchaScreen(): ReactElement {
       }
       return true;
     },
-    [executeReturnWithToken],
+    [executeReturnWithToken, tryConsumeCaptchaRedirect],
   );
 
   const handleWebViewMessage = useCallback(
@@ -83,15 +122,15 @@ export default function CaptchaScreen(): ReactElement {
   const handleNavigationStateChange = useCallback(
     (event: WebViewNavigation): void => {
       const url: string = event.url ?? '';
-      if (!url.startsWith('soliance://')) {
-        return;
-      }
-      const token: string | null = extractCaptchaTokenFromNavigationUrl(url);
-      if (token) {
-        executeReturnWithToken(token);
+      void tryConsumeCaptchaRedirect(url);
+      if (url.startsWith('soliance://')) {
+        const token: string | null = extractCaptchaTokenFromNavigationUrl(url);
+        if (token) {
+          executeReturnWithToken(token);
+        }
       }
     },
-    [executeReturnWithToken],
+    [executeReturnWithToken, tryConsumeCaptchaRedirect],
   );
 
   return (
