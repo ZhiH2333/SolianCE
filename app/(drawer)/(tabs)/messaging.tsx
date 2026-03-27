@@ -9,8 +9,15 @@ import { useContentApiSync } from '@/lib/hooks/use-content-api-sync';
 
 import ConversationItem from '@/components/messaging/ConversationItem';
 const PAGE_SIZE = 20;
-/** Tab 场景内容区已在底栏之上，FAB.Group 内部已用 safe area padding，勿再叠加底栏高度 */
-const FAB_EDGE_INSET = 8;
+const CHAT_LAYOUT_TOKENS = {
+  headerHeight: 56,
+  listTopPadding: 4,
+  listBottomSpacer: 96,
+  emptyHorizontalPadding: 16,
+  emptyVerticalPadding: 24,
+  fabEdgeInset: 8,
+  fabMarginBottom: 4,
+} as const;
 
 function extractConvKey(item: ConversationListItemDto): string {
   return item.id;
@@ -21,7 +28,7 @@ function ItemSeparator() {
 }
 
 function ListFooter() {
-  return <View style={{ height: 88 }} />;
+  return <View style={{ height: CHAT_LAYOUT_TOKENS.listBottomSpacer }} />;
 }
 
 export default function MessagingScreen() {
@@ -124,7 +131,7 @@ export default function MessagingScreen() {
         ItemSeparatorComponent={ItemSeparator}
         ListFooterComponent={ListFooter}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingTop: 4 }}
+        contentContainerStyle={{ paddingTop: CHAT_LAYOUT_TOKENS.listTopPadding }}
         refreshing={isLoading && items.length === 0}
         onRefresh={() => {
           setOffset(0);
@@ -139,7 +146,12 @@ export default function MessagingScreen() {
         onEndReachedThreshold={0.3}
         ListEmptyComponent={
           !isLoading ? (
-            <View style={{ paddingHorizontal: 16, paddingVertical: 24 }}>
+            <View
+              style={{
+                paddingHorizontal: CHAT_LAYOUT_TOKENS.emptyHorizontalPadding,
+                paddingVertical: CHAT_LAYOUT_TOKENS.emptyVerticalPadding,
+              }}
+            >
               <Text style={{ color: theme.colors.onSurfaceVariant }}>{loadError ?? '暂无聊天'}</Text>
             </View>
           ) : null
@@ -150,8 +162,11 @@ export default function MessagingScreen() {
         open={isFabOpen}
         visible
         icon={isFabOpen ? 'close' : 'plus'}
-        style={{ bottom: FAB_EDGE_INSET }}
-        fabStyle={{ backgroundColor: theme.colors.primaryContainer, marginBottom: 4 }}
+        style={{ bottom: CHAT_LAYOUT_TOKENS.fabEdgeInset }}
+        fabStyle={{
+          backgroundColor: theme.colors.primaryContainer,
+          marginBottom: CHAT_LAYOUT_TOKENS.fabMarginBottom,
+        }}
         color={theme.colors.onPrimaryContainer}
         actions={[
           {

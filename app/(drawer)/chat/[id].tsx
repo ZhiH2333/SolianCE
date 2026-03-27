@@ -20,10 +20,25 @@ import {
 import { useContentApiSync } from '@/lib/hooks/use-content-api-sync';
 
 const INPUT_MAX_LENGTH = 800;
-const MESSAGE_RADIUS = 16;
-const MESSAGE_PADDING_HORIZONTAL = 12;
-const MESSAGE_PADDING_VERTICAL = 10;
 const MESSAGE_PAGE_SIZE = 50;
+const CHAT_ROOM_TOKENS = {
+  messageRadius: 16,
+  messagePaddingHorizontal: 12,
+  messagePaddingVertical: 10,
+  messageItemVertical: 6,
+  messageRowGap: 10,
+  listPaddingTop: 8,
+  listPaddingHorizontal: 12,
+  listBottomSpace: 96,
+  inputWrapperHorizontal: 12,
+  inputWrapperTop: 8,
+  inputWrapperBottomInset: 8,
+  inputGap: 8,
+  sendButtonRadius: 14,
+  sendButtonBottom: 4,
+  avatarSize: 32,
+  avatarRadius: 16,
+} as const;
 
 function sortMessagesByTime(messages: ChatMessageDto[]): ChatMessageDto[] {
   return [...messages].sort((a: ChatMessageDto, b: ChatMessageDto) => new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime());
@@ -50,18 +65,24 @@ function MessageBubble({
   const contentColor = isSelf ? theme.colors.onPrimaryContainer : theme.colors.onSurfaceVariant;
   const metaColor = isSelf ? theme.colors.onPrimaryContainer : theme.colors.outline;
   const alignSelf = isSelf ? 'flex-end' : 'flex-start';
-  const bubbleBorderRadius = MESSAGE_RADIUS;
+  const bubbleBorderRadius = CHAT_ROOM_TOKENS.messageRadius;
 
   return (
-    <View style={{ alignSelf, maxWidth: '80%', marginVertical: 6, gap: 6 }}>
-      <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 10 }}>
-        {!isSelf && avatarUri && <UserAvatar uri={avatarUri} name={conversation?.name ?? ''} size={32} />}
+    <View style={{ alignSelf, maxWidth: '80%', marginVertical: CHAT_ROOM_TOKENS.messageItemVertical, gap: 6 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: CHAT_ROOM_TOKENS.messageRowGap }}>
+        {!isSelf && avatarUri && (
+          <UserAvatar
+            uri={avatarUri}
+            name={conversation?.name ?? ''}
+            size={CHAT_ROOM_TOKENS.avatarSize}
+          />
+        )}
         <View
           style={{
             backgroundColor: containerBackgroundColor,
             borderRadius: bubbleBorderRadius,
-            paddingHorizontal: MESSAGE_PADDING_HORIZONTAL,
-            paddingVertical: MESSAGE_PADDING_VERTICAL,
+            paddingHorizontal: CHAT_ROOM_TOKENS.messagePaddingHorizontal,
+            paddingVertical: CHAT_ROOM_TOKENS.messagePaddingVertical,
           }}
         >
           <Text variant="bodyMedium" style={{ color: contentColor, lineHeight: 20 }}>
@@ -79,7 +100,15 @@ function MessageBubble({
             {formatMessageTime(message.sentAt)}
           </Text>
         </View>
-        {isSelf && <View style={{ width: 32, height: 32, borderRadius: 16 }} />}
+        {isSelf && (
+          <View
+            style={{
+              width: CHAT_ROOM_TOKENS.avatarSize,
+              height: CHAT_ROOM_TOKENS.avatarSize,
+              borderRadius: CHAT_ROOM_TOKENS.avatarRadius,
+            }}
+          />
+        )}
       </View>
     </View>
   );
@@ -189,9 +218,9 @@ export default function ChatScreen(): ReactElement {
         renderItem={renderMessage}
         keyExtractor={(item: ChatMessageDto) => item.id}
         contentContainerStyle={{
-          paddingTop: 8,
-          paddingHorizontal: 12,
-          paddingBottom: 90 + insets.bottom,
+          paddingTop: CHAT_ROOM_TOKENS.listPaddingTop,
+          paddingHorizontal: CHAT_ROOM_TOKENS.listPaddingHorizontal,
+          paddingBottom: CHAT_ROOM_TOKENS.listBottomSpace + insets.bottom,
         }}
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={
@@ -209,14 +238,14 @@ export default function ChatScreen(): ReactElement {
       >
         <View
           style={{
-            paddingHorizontal: 12,
-            paddingTop: 8,
-            paddingBottom: insets.bottom + 8,
+            paddingHorizontal: CHAT_ROOM_TOKENS.inputWrapperHorizontal,
+            paddingTop: CHAT_ROOM_TOKENS.inputWrapperTop,
+            paddingBottom: insets.bottom + CHAT_ROOM_TOKENS.inputWrapperBottomInset,
             backgroundColor: theme.colors.background,
-            gap: 8,
+            gap: CHAT_ROOM_TOKENS.inputGap,
           }}
         >
-          <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 8 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: CHAT_ROOM_TOKENS.inputGap }}>
             <TextInput
               mode="outlined"
               label="输入消息"
@@ -231,7 +260,10 @@ export default function ChatScreen(): ReactElement {
               mode="contained"
               disabled={draft.trim().length === 0 || isSending}
               onPress={() => void executeSendMessage()}
-              style={{ borderRadius: 14, marginBottom: 4 }}
+              style={{
+                borderRadius: CHAT_ROOM_TOKENS.sendButtonRadius,
+                marginBottom: CHAT_ROOM_TOKENS.sendButtonBottom,
+              }}
             >
               <MaterialCommunityIcons name="send" size={18} color={theme.colors.onPrimaryContainer} />
               发送
