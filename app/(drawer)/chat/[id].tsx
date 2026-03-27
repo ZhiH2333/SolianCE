@@ -9,7 +9,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { format } from 'date-fns';
 import type { MockConversation, MockMessage } from '@/lib/mock/data';
-import { MOCK_CONVERSATIONS, MOCK_MESSAGES, MOCK_USER } from '@/lib/mock/data';
+import { LOCAL_MOCK_USER_ID, MOCK_CONVERSATIONS, MOCK_MESSAGES } from '@/lib/mock/data';
 import UserAvatar from '@/components/common/UserAvatar';
 
 const INPUT_MAX_LENGTH = 800;
@@ -33,7 +33,7 @@ function formatMessageTime(isoString: string): string {
 function MessageBubble({ message, conversation }: { message: MockMessage; conversation: MockConversation | undefined }) {
   const theme = useTheme();
   const isSelf: boolean = message.isSelf;
-  const avatarUri: string | undefined = isSelf ? MOCK_USER.avatar : conversation?.avatar;
+  const avatarUri: string | undefined = isSelf ? undefined : conversation?.avatar;
 
   const containerBackgroundColor = isSelf ? theme.colors.primaryContainer : theme.colors.surfaceVariant;
   const contentColor = isSelf ? theme.colors.onPrimaryContainer : theme.colors.onSurfaceVariant;
@@ -107,7 +107,7 @@ export default function ChatScreen(): ReactElement {
     const nextMessage: MockMessage = {
       id: `msg_local_${Date.now().toString()}`,
       conversationId,
-      senderId: MOCK_USER.id,
+      senderId: LOCAL_MOCK_USER_ID,
       content: trimmed,
       sentAt: new Date().toISOString(),
       isSelf: true,

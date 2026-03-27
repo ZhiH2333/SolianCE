@@ -2,10 +2,10 @@ import { View } from 'react-native';
 import { IconButton, Text, useTheme } from 'react-native-paper';
 import { formatDistanceToNow } from 'date-fns';
 import UserAvatar from '@/components/common/UserAvatar';
-import type { MockPostAuthor } from '@/lib/mock/data';
+import type { FeedPostAuthor } from '@/lib/models/feed';
 
 interface PostHeaderProps {
-  author: MockPostAuthor;
+  author: FeedPostAuthor;
   publishedAt: string;
   isEdited?: boolean;
   onMenuPress?: () => void;

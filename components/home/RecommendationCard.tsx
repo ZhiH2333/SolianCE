@@ -1,14 +1,14 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Image, View } from 'react-native';
 import { Card, Divider, IconButton, Text, useTheme } from 'react-native-paper';
 import { formatDistanceToNow } from 'date-fns';
-import { MOCK_POSTS, type MockPost } from '@/lib/mock/data';
+import type { FeedPost } from '@/lib/models/feed';
 import UserAvatar from '@/components/common/UserAvatar';
-
-const RECOMMENDATIONS = MOCK_POSTS.slice(0, 5);
+import { fetchTimelineFeedPosts } from '@/lib/api/content-api';
+import { useContentApiSync } from '@/lib/hooks/use-content-api-sync';
 
 interface InlinePostProps {
-  post: MockPost;
+  post: FeedPost;
 }
 
 function InlinePost({ post }: InlinePostProps) {
@@ -76,17 +76,48 @@ function InlinePost({ post }: InlinePostProps) {
 
 export default function RecommendationCard() {
   const theme = useTheme();
+  const sync = useContentApiSync();
+  const [posts, setPosts] = useState<FeedPost[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
   const [currentIndex, setCurrentIndex] = useState(0);
 
+  const loadPosts = useCallback(async (): Promise<void> => {
+    if (!sync) {
+      setPosts([]);
+      setLoadError(null);
+      setIsLoading(false);
+      return;
+    }
+    setIsLoading(true);
+    setLoadError(null);
+    try {
+      const list: FeedPost[] = await fetchTimelineFeedPosts(sync, 8);
+      setPosts(list);
+      setCurrentIndex(0);
+    } catch (err) {
+      const message: string = err instanceof Error ? err.message : '加载失败';
+      setLoadError(message);
+      setPosts([]);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [sync]);
+
+  useEffect(() => {
+    void loadPosts();
+  }, [loadPosts]);
+
   function goNext() {
-    setCurrentIndex((i) => Math.min(i + 1, RECOMMENDATIONS.length - 1));
+    setCurrentIndex((i) => Math.min(i + 1, Math.max(posts.length - 1, 0)));
   }
 
   function goPrev() {
     setCurrentIndex((i) => Math.max(i - 1, 0));
   }
 
-  const post = RECOMMENDATIONS[currentIndex];
+  const safeLen: number = posts.length > 0 ? posts.length : 1;
+  const post: FeedPost | null = posts.length > 0 ? posts[Math.min(currentIndex, posts.length - 1)] : null;
 
   return (
     <Card
@@ -114,13 +145,37 @@ export default function RecommendationCard() {
           variant="bodySmall"
           style={{ color: theme.colors.onSurfaceVariant, fontVariant: ['tabular-nums'] }}
         >
-          {currentIndex + 1}/{RECOMMENDATIONS.length}
+          {posts.length > 0 ? `${currentIndex + 1}/${posts.length}` : '0/0'}
         </Text>
       </View>
 
       <Divider />
 
-      <InlinePost post={post} />
+      {isLoading && (
+        <View style={{ paddingHorizontal: 16, paddingVertical: 24 }}>
+          <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
+            加载中…
+          </Text>
+        </View>
+      )}
+
+      {!isLoading && loadError && (
+        <View style={{ paddingHorizontal: 16, paddingVertical: 24 }}>
+          <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
+            {loadError}
+          </Text>
+        </View>
+      )}
+
+      {!isLoading && !loadError && !post && (
+        <View style={{ paddingHorizontal: 16, paddingVertical: 24 }}>
+          <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
+            暂无推荐
+          </Text>
+        </View>
+      )}
+
+      {!isLoading && !loadError && post && <InlinePost post={post} />}
 
       <Divider />
 
@@ -136,12 +191,12 @@ export default function RecommendationCard() {
         <IconButton
           icon="chevron-left"
           size={20}
-          disabled={currentIndex === 0}
+          disabled={currentIndex === 0 || posts.length === 0}
           iconColor={theme.colors.onSurfaceVariant}
           onPress={goPrev}
           style={{ margin: 0 }}
         />
-        {RECOMMENDATIONS.map((_, i) => (
+        {Array.from({ length: safeLen }, (_, i) => (
           <View
             key={i}
             style={{
@@ -156,7 +211,7 @@ export default function RecommendationCard() {
         <IconButton
           icon="chevron-right"
           size={20}
-          disabled={currentIndex === RECOMMENDATIONS.length - 1}
+          disabled={currentIndex >= posts.length - 1 || posts.length === 0}
           iconColor={theme.colors.onSurfaceVariant}
           onPress={goNext}
           style={{ margin: 0 }}

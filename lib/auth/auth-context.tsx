@@ -1,6 +1,7 @@
-import { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { PropsWithChildren } from 'react';
 import type { TokenPair } from '@/lib/api/types';
+import { refreshAccessToken } from '@/lib/api/http-client';
 import { clearStoredTokenPair, getStoredTokenPair, setStoredTokenPair } from '@/lib/api/token-store';
 
 interface AuthContextValue {
@@ -14,10 +15,7 @@ interface AuthContextValue {
 
 const AuthContext: React.Context<AuthContextValue | null> = createContext<AuthContextValue | null>(null);
 
-const MOCK_AUTH_ENABLED: boolean = true;
 const TOKEN_REFRESH_SKEW_MS: number = 30_000;
-const MOCK_ACCESS_TOKEN_TTL_MS: number = 15 * 60 * 1000;
-const MOCK_REFRESH_TOKEN_TTL_MS: number = 7 * 24 * 60 * 60 * 1000;
 
 function isTokenExpired(expiresAt: string | null): boolean {
   if (!expiresAt) {
@@ -33,21 +31,6 @@ function isTokenAboutToExpire(expiresAt: string | null, skewMs: number): boolean
   }
   const expireMs: number = new Date(expiresAt).getTime();
   return Number.isFinite(expireMs) && expireMs - skewMs <= Date.now();
-}
-
-function generateMockToken(prefix: string): string {
-  const randomPart: string = Math.random().toString(36).slice(2);
-  return `${prefix}.${Date.now()}.${randomPart}`;
-}
-
-function createMockTokenPair(): TokenPair {
-  const nowMs: number = Date.now();
-  return {
-    token: generateMockToken('mock_access_token'),
-    refreshToken: generateMockToken('mock_refresh_token'),
-    expiresAt: new Date(nowMs + MOCK_ACCESS_TOKEN_TTL_MS).toISOString(),
-    refreshExpiresAt: new Date(nowMs + MOCK_REFRESH_TOKEN_TTL_MS).toISOString(),
-  };
 }
 
 export function AuthProvider({ children }: PropsWithChildren): React.JSX.Element {
@@ -67,14 +50,7 @@ export function AuthProvider({ children }: PropsWithChildren): React.JSX.Element
         return;
       }
       try {
-        if (MOCK_AUTH_ENABLED) {
-          const refreshedPair: TokenPair = createMockTokenPair();
-          await setStoredTokenPair(refreshedPair);
-          setTokenPair(refreshedPair);
-          return;
-        }
-        // 目前 Phase 1 不接入真实 API；若未来移除 mock，请在此处接入真实 refresh。
-        const refreshedPair: TokenPair = createMockTokenPair();
+        const refreshedPair: TokenPair = await refreshAccessToken(storedPair);
         await setStoredTokenPair(refreshedPair);
         setTokenPair(refreshedPair);
       } catch {
@@ -84,7 +60,7 @@ export function AuthProvider({ children }: PropsWithChildren): React.JSX.Element
         setIsHydrating(false);
       }
     }
-    hydrateAuthState();
+    void hydrateAuthState();
   }, []);
 
   useEffect(() => {
@@ -95,34 +71,36 @@ export function AuthProvider({ children }: PropsWithChildren): React.JSX.Element
     let isMounted: boolean = true;
     let isRefreshing: boolean = false;
 
-    const intervalId: ReturnType<typeof setInterval> = setInterval(async () => {
-      if (!isMounted) {
-        return;
-      }
-      if (isRefreshing) {
-        return;
-      }
-      if (!isTokenAboutToExpire(tokenPair.expiresAt, TOKEN_REFRESH_SKEW_MS)) {
-        return;
-      }
-
-      isRefreshing = true;
-      try {
-        const refreshedPair: TokenPair = createMockTokenPair();
-        await setStoredTokenPair(refreshedPair);
-        if (!isMounted) {
+    const intervalId: ReturnType<typeof setInterval> = setInterval(() => {
+      void (async (): Promise<void> => {
+        if (!isMounted || isRefreshing) {
           return;
         }
-        setTokenPair(refreshedPair);
-      } catch {
-        if (!isMounted) {
+        const stored: TokenPair | null = await getStoredTokenPair();
+        if (!stored) {
           return;
         }
-        await clearStoredTokenPair();
-        setTokenPair(null);
-      } finally {
-        isRefreshing = false;
-      }
+        if (!isTokenAboutToExpire(stored.expiresAt, TOKEN_REFRESH_SKEW_MS)) {
+          return;
+        }
+        isRefreshing = true;
+        try {
+          const refreshedPair: TokenPair = await refreshAccessToken(stored);
+          await setStoredTokenPair(refreshedPair);
+          if (!isMounted) {
+            return;
+          }
+          setTokenPair(refreshedPair);
+        } catch {
+          if (!isMounted) {
+            return;
+          }
+          await clearStoredTokenPair();
+          setTokenPair(null);
+        } finally {
+          isRefreshing = false;
+        }
+      })();
     }, 10_000);
 
     return () => {
@@ -131,17 +109,17 @@ export function AuthProvider({ children }: PropsWithChildren): React.JSX.Element
     };
   }, [tokenPair]);
 
-  async function executeSignIn(pair: TokenPair): Promise<void> {
+  const executeSignIn = useCallback(async (pair: TokenPair): Promise<void> => {
     await setStoredTokenPair(pair);
     setTokenPair(pair);
-  }
+  }, []);
 
-  async function executeSignOut(): Promise<void> {
+  const executeSignOut = useCallback(async (): Promise<void> => {
     await clearStoredTokenPair();
     setTokenPair(null);
-  }
+  }, []);
 
-  async function executeEnsureFreshToken(): Promise<TokenPair | null> {
+  const executeEnsureFreshToken = useCallback(async (): Promise<TokenPair | null> => {
     if (!tokenPair) {
       return null;
     }
@@ -149,22 +127,16 @@ export function AuthProvider({ children }: PropsWithChildren): React.JSX.Element
       return tokenPair;
     }
     try {
-      if (MOCK_AUTH_ENABLED) {
-        const refreshedPair: TokenPair = createMockTokenPair();
-        await setStoredTokenPair(refreshedPair);
-        setTokenPair(refreshedPair);
-        return refreshedPair;
-      }
-      // 目前 Phase 1 不接入真实 API；若未来移除 mock，请在此处接入真实 refresh。
-      const refreshedPair: TokenPair = createMockTokenPair();
+      const refreshedPair: TokenPair = await refreshAccessToken(tokenPair);
       await setStoredTokenPair(refreshedPair);
       setTokenPair(refreshedPair);
       return refreshedPair;
     } catch {
-      await executeSignOut();
+      await clearStoredTokenPair();
+      setTokenPair(null);
       return null;
     }
-  }
+  }, [tokenPair]);
 
   const value: AuthContextValue = useMemo(
     () => ({
@@ -175,7 +147,7 @@ export function AuthProvider({ children }: PropsWithChildren): React.JSX.Element
       executeSignOut,
       executeEnsureFreshToken,
     }),
-    [tokenPair, isHydrating],
+    [tokenPair, isHydrating, executeSignIn, executeSignOut, executeEnsureFreshToken],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

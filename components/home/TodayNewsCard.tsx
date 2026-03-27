@@ -1,7 +1,10 @@
+import { useCallback, useEffect, useState } from 'react';
 import { View } from 'react-native';
 import { Card, Text, useTheme } from 'react-native-paper';
 import { formatDistanceToNow, format } from 'date-fns';
-import { MOCK_NEWS_ARTICLE } from '@/lib/mock/data';
+import type { NewsArticleSummary } from '@/lib/models/feed';
+import { fetchFirstNewsArticle } from '@/lib/api/content-api';
+import { useContentApiSync } from '@/lib/hooks/use-content-api-sync';
 
 function stripHtml(html: string): string {
   return html.replace(/<[^>]*>/g, '').trim();
@@ -9,8 +12,23 @@ function stripHtml(html: string): string {
 
 export default function TodayNewsCard() {
   const theme = useTheme();
-  const article = MOCK_NEWS_ARTICLE;
-  const publishedDate = new Date(article.publishedAt);
+  const sync = useContentApiSync();
+  const [article, setArticle] = useState<NewsArticleSummary | null>(null);
+
+  const loadArticle = useCallback(async (): Promise<void> => {
+    if (!sync) {
+      setArticle(null);
+      return;
+    }
+    const a = await fetchFirstNewsArticle(sync);
+    setArticle(a);
+  }, [sync]);
+
+  useEffect(() => {
+    void loadArticle();
+  }, [loadArticle]);
+
+  const publishedDate = article ? new Date(article.publishedAt) : null;
 
   return (
     <Card
@@ -26,28 +44,41 @@ export default function TodayNewsCard() {
           </Text>
         </View>
 
-        <Text
-          variant="titleSmall"
-          numberOfLines={2}
-          style={{ color: theme.colors.onSurface, lineHeight: 20, marginBottom: 6 }}
-        >
-          {article.title}
-        </Text>
+        {!article && (
+          <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+            暂无新闻
+          </Text>
+        )}
 
-        <Text
-          variant="bodySmall"
-          numberOfLines={3}
-          style={{ color: theme.colors.onSurfaceVariant, lineHeight: 18 }}
-        >
-          {stripHtml(article.description)}
-        </Text>
+        {article && (
+          <>
+            <Text
+              variant="titleSmall"
+              numberOfLines={2}
+              style={{ color: theme.colors.onSurface, lineHeight: 20, marginBottom: 6 }}
+            >
+              {article.title}
+            </Text>
 
-        <Text
-          variant="bodySmall"
-          style={{ color: theme.colors.outline, marginTop: 8, opacity: 0.75 }}
-        >
-          {format(publishedDate, 'MM/dd/yyyy')} · {formatDistanceToNow(publishedDate, { addSuffix: true })}
-        </Text>
+            <Text
+              variant="bodySmall"
+              numberOfLines={3}
+              style={{ color: theme.colors.onSurfaceVariant, lineHeight: 18 }}
+            >
+              {stripHtml(article.description)}
+            </Text>
+
+            {publishedDate && !Number.isNaN(publishedDate.getTime()) && (
+              <Text
+                variant="bodySmall"
+                style={{ color: theme.colors.outline, marginTop: 8, opacity: 0.75 }}
+              >
+                {format(publishedDate, 'MM/dd/yyyy')} ·{' '}
+                {formatDistanceToNow(publishedDate, { addSuffix: true })}
+              </Text>
+            )}
+          </>
+        )}
       </Card.Content>
     </Card>
   );

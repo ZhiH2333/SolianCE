@@ -1,18 +1,18 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Image, View } from 'react-native';
 import { Card, Chip, Divider, IconButton, Surface, Text, useTheme } from 'react-native-paper';
-import { MOCK_COMMENTS, type MockPost, type MockReaction } from '@/lib/mock/data';
+import type { FeedPost, FeedReaction } from '@/lib/models/feed';
 import PostHeader from './PostHeader';
 
 interface PostCardProps {
-  post: MockPost;
+  post: FeedPost;
   onPress?: () => void;
 }
 
 const MAX_LINES = 6;
 
 interface ReactionPillProps {
-  reaction: MockReaction;
+  reaction: FeedReaction;
   onPress: () => void;
 }
 
@@ -93,12 +93,18 @@ function LinkPreviewCard({ title, description, url, source }: LinkPreviewProps) 
 
 export default function PostCard({ post, onPress }: PostCardProps) {
   const theme = useTheme();
-  const [reactions, setReactions] = useState<MockReaction[]>(
+  const [reactions, setReactions] = useState<FeedReaction[]>(
     post.reactions ?? [],
   );
   const [isExpanded, setIsExpanded] = useState(false);
   const [isTextTruncated, setIsTextTruncated] = useState(false);
-  const firstComment = MOCK_COMMENTS.find((c) => c.postId === post.id);
+  const firstCommentPreview: string | undefined = post.commentPreview;
+
+  useEffect(() => {
+    setReactions(post.reactions ?? []);
+    setIsExpanded(false);
+    setIsTextTruncated(false);
+  }, [post.id, post.reactions]);
 
   function toggleReaction(index: number) {
     setReactions((prev) =>
@@ -193,7 +199,7 @@ export default function PostCard({ post, onPress }: PostCardProps) {
           />
         )}
 
-        {(post.comments > 0 || firstComment) && (
+        {(post.comments > 0 || firstCommentPreview) && (
           <View
             style={{
               flexDirection: 'row',
@@ -215,7 +221,7 @@ export default function PostCard({ post, onPress }: PostCardProps) {
           </View>
         )}
 
-        {firstComment && (
+        {firstCommentPreview && (
           <View
             style={{
               flexDirection: 'row',
@@ -229,7 +235,7 @@ export default function PostCard({ post, onPress }: PostCardProps) {
               numberOfLines={2}
               style={{ fontSize: 13, color: theme.colors.onSurfaceVariant }}
             >
-              {firstComment.content}
+              {firstCommentPreview}
             </Text>
           </View>
         )}

@@ -13,34 +13,19 @@ import {
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { AuthFactor } from '@/lib/api/types';
-import type { TokenPair } from '@/lib/api/types';
+import {
+  createAuthChallenge,
+  createDefaultChallengePayload,
+  exchangeAuthorizationCode,
+  getChallengeFactors,
+  patchAuthChallenge,
+  triggerChallengeFactor,
+} from '@/lib/api/http-client';
 import { useAuthContext } from '@/lib/auth/auth-context';
 import { getFactorLabelEn } from '@/lib/auth/factor';
 import { V3_AUTH, V3_ICON_CIRCLE_SIZE, V3_PILL_RADIUS } from '@/lib/auth/v3-auth-theme';
 
 type LoginStep = 'lookup' | 'factor' | 'verify';
-
-const MOCK_ACCESS_TOKEN_TTL_MS: number = 15 * 60 * 1000;
-const MOCK_REFRESH_TOKEN_TTL_MS: number = 7 * 24 * 60 * 60 * 1000;
-
-function generateMockToken(prefix: string): string {
-  const randomPart: string = Math.random().toString(36).slice(2);
-  return `${prefix}.${Date.now()}.${randomPart}`;
-}
-
-function createMockTokenPair(): TokenPair {
-  const nowMs: number = Date.now();
-  return {
-    token: generateMockToken('mock_access_token'),
-    refreshToken: generateMockToken('mock_refresh_token'),
-    expiresAt: new Date(nowMs + MOCK_ACCESS_TOKEN_TTL_MS).toISOString(),
-    refreshExpiresAt: new Date(nowMs + MOCK_REFRESH_TOKEN_TTL_MS).toISOString(),
-  };
-}
-
-function createMockFactors(): AuthFactor[] {
-  return [{ id: 1, type: 0, name: 'Password' }];
-}
 
 function getFactorDescriptionEn(type: number): string {
   switch (type) {
@@ -87,41 +72,86 @@ export default function LoginScreen(): ReactElement {
     [challengeId, selectedFactor, secret],
   );
 
-  function executeLookup(): void {
+  async function executeLookup(): Promise<void> {
     if (!canSubmitAccount) {
       return;
     }
+    const trimmedAccount: string = account.trim();
     setIsSubmitting(true);
     try {
-      const mockChallengeId: string = `mock_challenge_${account.trim()}_${Date.now()}`;
-      const items: AuthFactor[] = createMockFactors();
-      setChallengeId(mockChallengeId);
+      const challenge = await createAuthChallenge(createDefaultChallengePayload(trimmedAccount));
+      setChallengeId(challenge.id);
+      const items: AuthFactor[] = await getChallengeFactors(challenge.id);
+      if (items.length === 0) {
+        Alert.alert('Sign in failed', 'No sign-in methods are available for this account.');
+        return;
+      }
+      if (challenge.stepRemain === 0) {
+        const pair = await exchangeAuthorizationCode(challenge.id);
+        await executeSignIn(pair);
+        router.replace('/(drawer)/(tabs)/' as any);
+        return;
+      }
       setFactors(items);
       setSelectedFactor(null);
       setSecret('');
       setStep('factor');
+    } catch (error) {
+      Alert.alert('Sign in failed', error instanceof Error ? error.message : 'Could not start sign-in.');
     } finally {
       setIsSubmitting(false);
     }
   }
 
-  function executeFactorNext(): void {
+  async function executeFactorNext(): Promise<void> {
     if (!selectedFactor) {
       Alert.alert('Pick a factor', 'Please select one sign-in method.');
       return;
     }
-    setSecret('');
-    setStep('verify');
-  }
-
-  async function executeVerify(): Promise<void> {
-    if (!selectedFactor || !canSubmitVerify) {
+    if (!challengeId) {
       return;
     }
     setIsSubmitting(true);
     try {
-      await new Promise<void>((resolve) => setTimeout(resolve, 450));
-      const pair: TokenPair = createMockTokenPair();
+      try {
+        await triggerChallengeFactor(challengeId, selectedFactor.id);
+      } catch (triggerError) {
+        const triggerMessage: string =
+          triggerError instanceof Error ? triggerError.message : String(triggerError);
+        if (!triggerMessage.includes('400')) {
+          throw triggerError;
+        }
+      }
+      setSecret('');
+      setStep('verify');
+    } catch (error) {
+      Alert.alert('Sign in failed', error instanceof Error ? error.message : 'Could not prepare verification.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function executeVerify(): Promise<void> {
+    if (!selectedFactor || !canSubmitVerify || !challengeId) {
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      const patchResult = await patchAuthChallenge(challengeId, {
+        factorId: selectedFactor.id,
+        password: secret.trim(),
+      });
+      const nextChallengeId: string = patchResult.id;
+      setChallengeId(nextChallengeId);
+      if (patchResult.stepRemain > 0) {
+        const nextFactors: AuthFactor[] = await getChallengeFactors(nextChallengeId);
+        setFactors(nextFactors.length > 0 ? nextFactors : factors);
+        setSelectedFactor(null);
+        setSecret('');
+        setStep('factor');
+        return;
+      }
+      const pair = await exchangeAuthorizationCode(nextChallengeId);
       await executeSignIn(pair);
       router.replace('/(drawer)/(tabs)/' as any);
     } catch (error) {
@@ -258,7 +288,7 @@ export default function LoginScreen(): ReactElement {
               </View>
             </View>
             <View style={{ alignItems: 'flex-end', marginTop: 8 }}>
-              <Pressable onPress={executeLookup} disabled={!canSubmitAccount || isSubmitting}>
+              <Pressable onPress={() => void executeLookup()} disabled={!canSubmitAccount || isSubmitting}>
                 <Text style={{ color: V3_AUTH.tealDark, fontWeight: '700', fontSize: 16 }}>Next &gt;</Text>
               </Pressable>
             </View>
@@ -354,7 +384,7 @@ export default function LoginScreen(): ReactElement {
               1 step left
             </Text>
             <View style={{ alignItems: 'flex-end' }}>
-              <Pressable onPress={executeFactorNext} disabled={isSubmitting}>
+              <Pressable onPress={() => void executeFactorNext()} disabled={isSubmitting || !challengeId}>
                 <Text style={{ color: V3_AUTH.tealDark, fontWeight: '700', fontSize: 16 }}>Next &gt;</Text>
               </Pressable>
             </View>
@@ -411,7 +441,7 @@ export default function LoginScreen(): ReactElement {
               </View>
             </View>
             <View style={{ alignItems: 'flex-end', marginTop: 24 }}>
-              <Pressable onPress={executeVerify} disabled={!canSubmitVerify || isSubmitting}>
+              <Pressable onPress={() => void executeVerify()} disabled={!canSubmitVerify || isSubmitting}>
                 <Text style={{ color: V3_AUTH.tealDark, fontWeight: '700', fontSize: 16 }}>Next &gt;</Text>
               </Pressable>
             </View>

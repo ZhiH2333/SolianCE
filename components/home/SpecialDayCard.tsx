@@ -1,9 +1,12 @@
+import { useCallback, useEffect, useState } from 'react';
 import { View } from 'react-native';
 import { Card, ProgressBar, Text, useTheme } from 'react-native-paper';
 import { formatDistanceToNow, differenceInDays } from 'date-fns';
+import { fetchNextNotableDay } from '@/lib/api/content-api';
+import { useContentApiSync } from '@/lib/hooks/use-content-api-sync';
 
 interface SpecialDay {
-  name: string;
+  displayTitle: string;
   emoji: string;
   date: Date;
 }
@@ -51,7 +54,7 @@ const SPECIAL_DAYS: Array<{ name: string; month: number; day: number }> = [
   { name: 'MerryXmas', month: 12, day: 25 },
 ];
 
-function findNextSpecialDay(): SpecialDay | null {
+function findNextSpecialDayLocal(): SpecialDay | null {
   const now = new Date();
   let closest: { name: string; date: Date } | null = null;
 
@@ -65,9 +68,11 @@ function findNextSpecialDay(): SpecialDay | null {
     }
   }
 
-  if (!closest) return null;
+  if (!closest) {
+    return null;
+  }
   return {
-    name: closest.name,
+    displayTitle: SPECIAL_DAY_LABELS[closest.name] ?? closest.name,
     emoji: SPECIAL_DAY_SYMBOLS[closest.name] ?? '🎉',
     date: closest.date,
   };
@@ -84,9 +89,44 @@ function computeProgress(nextDate: Date): number {
 
 export default function SpecialDayCard() {
   const theme = useTheme();
-  const nextDay = findNextSpecialDay();
+  const sync = useContentApiSync();
+  const [nextDay, setNextDay] = useState<SpecialDay | null>(() => findNextSpecialDayLocal());
 
-  if (!nextDay) return null;
+  const resolveDay = useCallback(async (): Promise<void> => {
+    const fallback: SpecialDay | null = findNextSpecialDayLocal();
+    if (!sync) {
+      setNextDay(fallback);
+      return;
+    }
+    try {
+      const dto = await fetchNextNotableDay(sync);
+      if (!dto) {
+        setNextDay(fallback);
+        return;
+      }
+      const key: string = dto.localizableKey ?? '';
+      const displayTitle: string =
+        dto.localName.length > 0
+          ? dto.localName
+          : (key.length > 0 ? SPECIAL_DAY_LABELS[key] ?? key : '下一纪念日');
+      const emoji: string = SPECIAL_DAY_SYMBOLS[key] ?? '🎉';
+      setNextDay({
+        displayTitle,
+        emoji,
+        date: dto.date,
+      });
+    } catch {
+      setNextDay(fallback);
+    }
+  }, [sync]);
+
+  useEffect(() => {
+    void resolveDay();
+  }, [resolveDay]);
+
+  if (!nextDay) {
+    return null;
+  }
 
   const daysLeft = differenceInDays(nextDay.date, new Date());
   const progress = computeProgress(nextDay.date);
@@ -103,7 +143,7 @@ export default function SpecialDayCard() {
           <Text style={{ fontSize: 28 }}>{nextDay.emoji}</Text>
           <View style={{ flex: 1 }}>
             <Text variant="titleSmall" style={{ color: theme.colors.onSurface }}>
-              {SPECIAL_DAY_LABELS[nextDay.name] ?? nextDay.name}{' '}
+              {nextDay.displayTitle}{' '}
               <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
                 {relativeLabel}
               </Text>

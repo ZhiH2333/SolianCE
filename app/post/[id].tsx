@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Image, ScrollView, View } from 'react-native';
 import {
   Appbar,
@@ -14,11 +14,13 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import PostHeader from '@/components/posts/PostHeader';
-import { MOCK_COMMENTS, MOCK_POSTS, type MockComment, type MockReaction } from '@/lib/mock/data';
+import type { FeedComment, FeedPost, FeedReaction } from '@/lib/models/feed';
 import { formatDistanceToNow } from 'date-fns';
+import { fetchFeedPostById, fetchPostReplies } from '@/lib/api/content-api';
+import { useContentApiSync } from '@/lib/hooks/use-content-api-sync';
 
 interface ReactionPillProps {
-  reaction: MockReaction;
+  reaction: FeedReaction;
   onPress: () => void;
 }
 
@@ -46,7 +48,7 @@ function ReactionPill({ reaction, onPress }: ReactionPillProps) {
 }
 
 interface CommentItemProps {
-  comment: MockComment;
+  comment: FeedComment;
 }
 
 function CommentItem({ comment }: CommentItemProps) {
@@ -61,7 +63,7 @@ function CommentItem({ comment }: CommentItemProps) {
         paddingVertical: 12,
       }}
     >
-      <Avatar.Image size={34} source={{ uri: comment.author.avatar }} />
+      <Avatar.Image size={34} source={{ uri: comment.author.avatar || undefined }} />
       <View style={{ flex: 1 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
           <Text
@@ -132,11 +134,45 @@ export default function PostDetailScreen() {
   const router = useRouter();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
+  const sync = useContentApiSync();
+  const [post, setPost] = useState<FeedPost | null>(null);
+  const [comments, setComments] = useState<FeedComment[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [reactions, setReactions] = useState<FeedReaction[]>([]);
 
-  const post = MOCK_POSTS.find((p) => p.id === id) ?? MOCK_POSTS[0];
-  const comments = MOCK_COMMENTS.filter((c) => c.postId === post.id);
+  const loadDetail = useCallback(async (): Promise<void> => {
+    if (!sync || !id) {
+      setPost(null);
+      setComments([]);
+      setLoadError(null);
+      return;
+    }
+    setLoadError(null);
+    try {
+      const p: FeedPost | null = await fetchFeedPostById(sync, id);
+      if (!p) {
+        setPost(null);
+        setLoadError('帖子不存在');
+        setComments([]);
+        setReactions([]);
+        return;
+      }
+      setPost(p);
+      setReactions(p.reactions ?? []);
+      const replyList: FeedComment[] = await fetchPostReplies(sync, id, 0, 40);
+      setComments(replyList);
+    } catch (err) {
+      const message: string = err instanceof Error ? err.message : '加载失败';
+      setLoadError(message);
+      setPost(null);
+      setComments([]);
+      setReactions([]);
+    }
+  }, [sync, id]);
 
-  const [reactions, setReactions] = useState<MockReaction[]>(post.reactions ?? []);
+  useEffect(() => {
+    void loadDetail();
+  }, [loadDetail]);
 
   function toggleReaction(index: number) {
     setReactions((prev) =>
@@ -145,6 +181,44 @@ export default function PostDetailScreen() {
           ? { ...r, reacted: !r.reacted, count: r.reacted ? r.count - 1 : r.count + 1 }
           : r,
       ),
+    );
+  }
+
+  if (!post && loadError) {
+    return (
+      <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
+        <Appbar.Header style={{ backgroundColor: theme.colors.surface }} elevated>
+          <Appbar.BackAction
+            onPress={() => router.back()}
+            iconColor={theme.colors.onSurface}
+          />
+          <Appbar.Content title="帖子详情" />
+        </Appbar.Header>
+        <View style={{ padding: 24 }}>
+          <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
+            {loadError}
+          </Text>
+        </View>
+      </View>
+    );
+  }
+
+  if (!post) {
+    return (
+      <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
+        <Appbar.Header style={{ backgroundColor: theme.colors.surface }} elevated>
+          <Appbar.BackAction
+            onPress={() => router.back()}
+            iconColor={theme.colors.onSurface}
+          />
+          <Appbar.Content title="帖子详情" />
+        </Appbar.Header>
+        <View style={{ padding: 24 }}>
+          <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
+            加载中…
+          </Text>
+        </View>
+      </View>
     );
   }
 
@@ -177,7 +251,6 @@ export default function PostDetailScreen() {
         contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
         showsVerticalScrollIndicator={false}
       >
-        {/* 完整帖子内容 */}
         <View style={{ backgroundColor: theme.colors.surface, paddingTop: 14 }}>
           <View style={{ paddingHorizontal: 16 }}>
             <PostHeader
@@ -344,7 +417,6 @@ export default function PostDetailScreen() {
           <Divider style={{ marginTop: 12 }} />
         </View>
 
-        {/* 评论区 */}
         <CommentsHeader count={comments.length} />
         <Divider />
 

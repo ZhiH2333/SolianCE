@@ -1,25 +1,24 @@
-import { useState } from 'react';
-import { Alert, FlatList, View } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, FlatList, View } from 'react-native';
 import { DrawerActions } from '@react-navigation/native';
 import { useNavigation } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
-import { Appbar, FAB, useTheme } from 'react-native-paper';
+import { Appbar, FAB, Text, useTheme } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import PostCard from '@/components/posts/PostCard';
-import { MOCK_POSTS, type MockPost } from '@/lib/mock/data';
+import type { FeedPost } from '@/lib/models/feed';
+import { fetchSpherePostsPage } from '@/lib/api/content-api';
+import { useContentApiSync } from '@/lib/hooks/use-content-api-sync';
 
 const BOTTOM_NAV_HEIGHT = 80;
+const PAGE_SIZE = 20;
 
-function RenderPostItem({ item, onPress }: { item: MockPost; onPress: (id: string) => void }) {
+function RenderPostItem({ item, onPress }: { item: FeedPost; onPress: (id: string) => void }) {
   return <PostCard post={item} onPress={() => onPress(item.id)} />;
 }
 
-function extractPostKey(item: MockPost): string {
+function extractPostKey(item: FeedPost): string {
   return item.id;
-}
-
-function ListFooter() {
-  return <View style={{ height: 160 }} />;
 }
 
 export default function ExploreScreen() {
@@ -27,7 +26,75 @@ export default function ExploreScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const router = useRouter();
+  const sync = useContentApiSync();
   const [isFabOpen, setIsFabOpen] = useState(false);
+  const [posts, setPosts] = useState<FeedPost[]>([]);
+  const [offset, setOffset] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  const loadPage = useCallback(
+    async (fromOffset: number, append: boolean): Promise<void> => {
+      if (!sync) {
+        setPosts([]);
+        setLoadError(null);
+        setIsLoading(false);
+        setHasMore(false);
+        return;
+      }
+      if (append) {
+        setIsLoadingMore(true);
+      } else {
+        setIsLoading(true);
+      }
+      setLoadError(null);
+      try {
+        const { posts: page } = await fetchSpherePostsPage(sync, fromOffset, PAGE_SIZE);
+        if (append) {
+          setPosts((prev) => [...prev, ...page]);
+        } else {
+          setPosts(page);
+        }
+        setOffset(fromOffset + page.length);
+        setHasMore(page.length >= PAGE_SIZE);
+      } catch (err) {
+        const message: string = err instanceof Error ? err.message : '加载失败';
+        setLoadError(message);
+        if (!append) {
+          setPosts([]);
+        }
+        setHasMore(false);
+      } finally {
+        setIsLoading(false);
+        setIsLoadingMore(false);
+      }
+    },
+    [sync],
+  );
+
+  useEffect(() => {
+    void loadPage(0, false);
+  }, [loadPage]);
+
+  function handleEndReached(): void {
+    if (!sync || isLoading || isLoadingMore || !hasMore || loadError) {
+      return;
+    }
+    void loadPage(offset, true);
+  }
+
+  function ListFooter() {
+    if (isLoadingMore) {
+      return (
+        <View style={{ paddingVertical: 16, alignItems: 'center' }}>
+          <ActivityIndicator color={theme.colors.primary} />
+        </View>
+      );
+    }
+    return <View style={{ height: 160 }} />;
+  }
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
@@ -56,13 +123,29 @@ export default function ExploreScreen() {
       </Appbar.Header>
 
       <FlatList
-        data={MOCK_POSTS}
+        data={posts}
         renderItem={({ item }) => (
           <RenderPostItem item={item} onPress={(id) => router.push(`/post/${id}`)} />
         )}
         keyExtractor={extractPostKey}
-        contentContainerStyle={{ paddingTop: 0 }}
+        contentContainerStyle={{ paddingTop: 0, flexGrow: 1 }}
         ListFooterComponent={ListFooter}
+        ListEmptyComponent={
+          !isLoading ? (
+            <View style={{ padding: 24 }}>
+              <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
+                {loadError ?? '暂无帖子'}
+              </Text>
+            </View>
+          ) : null
+        }
+        refreshing={isLoading && posts.length === 0}
+        onRefresh={() => {
+          setOffset(0);
+          void loadPage(0, false);
+        }}
+        onEndReached={handleEndReached}
+        onEndReachedThreshold={0.3}
         showsVerticalScrollIndicator={false}
       />
 

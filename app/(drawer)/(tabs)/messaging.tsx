@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Alert, FlatList, View } from 'react-native';
 import { DrawerActions } from '@react-navigation/native';
 import { useNavigation } from '@react-navigation/native';
+import { useRouter } from 'expo-router';
 import { Appbar, Divider, FAB, useTheme } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -25,10 +26,11 @@ export default function MessagingScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
+  const router = useRouter();
   const [isFabOpen, setIsFabOpen] = useState(false);
 
   function handleConversationPress(conv: MockConversation) {
-    Alert.alert(conv.name, '聊天功能开发中');
+    router.push(`/chat/${conv.id}` as any);
   }
 
   function renderConversationItem({ item }: { item: MockConversation }) {

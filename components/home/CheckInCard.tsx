@@ -1,15 +1,9 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { View } from 'react-native';
 import { Card, IconButton, Text, useTheme } from 'react-native-paper';
 import { format } from 'date-fns';
-
-const CHECK_IN_RESULTS = [
-  { symbol: '大吉', exp: 150, coin: 103.8, streak: 1 },
-  { symbol: '吉', exp: 80, coin: 50.0, streak: 1 },
-  { symbol: '中吉', exp: 60, coin: 30.0, streak: 1 },
-  { symbol: '小吉', exp: 40, coin: 10.0, streak: 1 },
-  { symbol: '末吉', exp: 20, coin: 0, streak: 1 },
-];
+import { fetchCheckInToday, postCheckIn } from '@/lib/api/content-api';
+import { useContentApiSync } from '@/lib/hooks/use-content-api-sync';
 
 interface CheckInRecord {
   symbol: string;
@@ -20,21 +14,70 @@ interface CheckInRecord {
 
 export default function CheckInCard() {
   const theme = useTheme();
+  const sync = useContentApiSync();
   const [isCheckedIn, setIsCheckedIn] = useState(false);
   const [isBusy, setIsBusy] = useState(false);
   const [record, setRecord] = useState<CheckInRecord | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const todayLine1 = format(new Date(), 'EEE');
   const todayLine2 = format(new Date(), 'MM/dd');
 
-  function handleCheckIn() {
-    setIsBusy(true);
-    setTimeout(() => {
-      const result = CHECK_IN_RESULTS[Math.floor(Math.random() * CHECK_IN_RESULTS.length)];
-      setRecord(result);
+  const refreshToday = useCallback(async (): Promise<void> => {
+    if (!sync) {
+      setIsCheckedIn(false);
+      setRecord(null);
+      setLoadError(null);
+      return;
+    }
+    setLoadError(null);
+    try {
+      const today = await fetchCheckInToday(sync);
+      if (today === null) {
+        setIsCheckedIn(false);
+        setRecord(null);
+        return;
+      }
       setIsCheckedIn(true);
+      setRecord({
+        symbol: today.symbol,
+        exp: today.exp,
+        coin: today.coin,
+        streak: today.streak,
+      });
+    } catch (err) {
+      const message: string = err instanceof Error ? err.message : '加载失败';
+      setLoadError(message);
+      setIsCheckedIn(false);
+      setRecord(null);
+    }
+  }, [sync]);
+
+  useEffect(() => {
+    void refreshToday();
+  }, [refreshToday]);
+
+  async function handleCheckIn() {
+    if (!sync) {
+      return;
+    }
+    setIsBusy(true);
+    setLoadError(null);
+    try {
+      const result = await postCheckIn(sync);
+      setRecord({
+        symbol: result.symbol,
+        exp: result.exp,
+        coin: result.coin,
+        streak: result.streak,
+      });
+      setIsCheckedIn(true);
+    } catch (err) {
+      const message: string = err instanceof Error ? err.message : '签到失败';
+      setLoadError(message);
+    } finally {
       setIsBusy(false);
-    }, 600);
+    }
   }
 
   return (
@@ -46,6 +89,11 @@ export default function CheckInCard() {
       <Card.Content style={{ padding: 20 }}>
         <View style={{ minHeight: 120, justifyContent: 'space-between' }}>
           <View>
+            {loadError && (
+              <Text variant="bodySmall" style={{ color: theme.colors.error, marginBottom: 4 }}>
+                {loadError}
+              </Text>
+            )}
             {isCheckedIn && record ? (
               <>
                 <Text
@@ -116,8 +164,10 @@ export default function CheckInCard() {
                   icon="fire"
                   size={22}
                   iconColor={theme.colors.primary}
-                  disabled={isBusy}
-                  onPress={handleCheckIn}
+                  disabled={isBusy || !sync}
+                  onPress={() => {
+                    void handleCheckIn();
+                  }}
                 />
               )}
             </View>
