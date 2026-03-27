@@ -116,6 +116,114 @@ export async function fetchPostReplies(
   return comments;
 }
 
+export interface ConversationListItemDto {
+  id: string;
+  name: string;
+  isGroup: boolean;
+  avatar: string;
+  lastMessage: string;
+  lastMessageSender: string;
+  lastMessageTime: string;
+  unread: number;
+  isEncrypted: boolean;
+}
+
+function pickNumber(source: Record<string, unknown>, keys: string[]): number {
+  for (const key of keys) {
+    const value: unknown = source[key];
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return value;
+    }
+    if (typeof value === 'string' && value.length > 0) {
+      const parsed: number = Number(value);
+      if (Number.isFinite(parsed)) {
+        return parsed;
+      }
+    }
+  }
+  return 0;
+}
+
+function mapJsonToConversationListItem(raw: unknown): ConversationListItemDto | null {
+  const root: Record<string, unknown> | null = readRecord(raw);
+  if (!root) {
+    return null;
+  }
+  const id: string = pickString(root, ['id', 'chat_id', 'chatId']);
+  if (!id) {
+    return null;
+  }
+  const roomName: string = pickString(root, ['name', 'title']);
+  const displayName: string = roomName.length > 0 ? roomName : '聊天';
+  const avatarRoot: Record<string, unknown> | null =
+    readRecord(root.avatar) ??
+    readRecord(root.picture) ??
+    readRecord(root.profile_picture) ??
+    readRecord(root.profilePicture);
+  const avatar: string =
+    pickString(root, ['avatar', 'picture', 'icon']) ||
+    pickString(avatarRoot ?? {}, ['public_url', 'publicUrl', 'url']) ||
+    '';
+  const latestMessageRoot: Record<string, unknown> | null =
+    readRecord(root.last_message) ?? readRecord(root.lastMessage) ?? readRecord(root.latest_message);
+  const lastMessage: string =
+    pickString(root, ['last_message_text', 'lastMessageText']) ||
+    pickString(latestMessageRoot ?? {}, ['body', 'content', 'text']) ||
+    '';
+  const lastMessageSender: string =
+    pickString(root, ['last_message_sender', 'lastMessageSender']) ||
+    pickString(latestMessageRoot ?? {}, ['sender_name', 'senderName', 'author_name', 'authorName']) ||
+    '';
+  const lastMessageTime: string =
+    pickString(root, ['last_message_time', 'lastMessageTime', 'updated_at', 'updatedAt']) ||
+    pickString(latestMessageRoot ?? {}, ['created_at', 'createdAt', 'sent_at', 'sentAt']) ||
+    new Date().toISOString();
+  const unread: number = pickNumber(root, ['unread', 'unread_count', 'unreadCount', 'badge']);
+  const isGroupRaw: unknown = root.is_group ?? root.isGroup ?? root.type;
+  const isGroup: boolean =
+    isGroupRaw === true ||
+    isGroupRaw === 'group' ||
+    isGroupRaw === 'channel' ||
+    isGroupRaw === 'realm';
+  const isEncryptedRaw: unknown = root.is_encrypted ?? root.isEncrypted ?? root.mls_enabled ?? root.mlsEnabled;
+  const isEncrypted: boolean = isEncryptedRaw === true;
+  return {
+    id,
+    name: displayName,
+    isGroup,
+    avatar,
+    lastMessage,
+    lastMessageSender: lastMessageSender.length > 0 ? lastMessageSender : '系统',
+    lastMessageTime,
+    unread,
+    isEncrypted,
+  };
+}
+
+export async function fetchChatConversationsPage(
+  sync: ContentApiSync,
+  offset: number,
+  take: number,
+): Promise<{ items: ConversationListItemDto[]; totalCount: number | null }> {
+  const params: URLSearchParams = new URLSearchParams({
+    offset: String(offset),
+    take: String(take),
+  });
+  const { items: rawItems, tokenPair, totalCount } = await performAuthorizedGetList(
+    `/messager/chat?${params.toString()}`,
+    sync.tokenPair,
+  );
+  await syncTokenIfChanged(sync, tokenPair);
+  const items: ConversationListItemDto[] = [];
+  for (const raw of rawItems) {
+    const mapped: ConversationListItemDto | null = mapJsonToConversationListItem(raw);
+    if (mapped) {
+      items.push(mapped);
+    }
+  }
+  return { items, totalCount };
+}
+
 export async function fetchNotificationUnreadCount(sync: ContentApiSync): Promise<number> {
   const { data, tokenPair } = await performAuthorizedFetch('/ring/notifications/count', { method: 'GET' }, sync.tokenPair);
   await syncTokenIfChanged(sync, tokenPair);

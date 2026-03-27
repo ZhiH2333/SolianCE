@@ -1,16 +1,18 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Alert, FlatList, View } from 'react-native';
 import { DrawerActions } from '@react-navigation/native';
 import { useNavigation } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
-import { Appbar, Divider, FAB, useTheme } from 'react-native-paper';
+import { Appbar, Divider, FAB, Text, useTheme } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { fetchChatConversationsPage, type ConversationListItemDto } from '@/lib/api/content-api';
+import { useContentApiSync } from '@/lib/hooks/use-content-api-sync';
 
 const BOTTOM_NAV_HEIGHT = 80;
 import ConversationItem from '@/components/messaging/ConversationItem';
-import { MOCK_CONVERSATIONS, type MockConversation } from '@/lib/mock/data';
+const PAGE_SIZE = 20;
 
-function extractConvKey(item: MockConversation): string {
+function extractConvKey(item: ConversationListItemDto): string {
   return item.id;
 }
 
@@ -27,13 +29,64 @@ export default function MessagingScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const router = useRouter();
+  const sync = useContentApiSync();
   const [isFabOpen, setIsFabOpen] = useState(false);
+  const [items, setItems] = useState<ConversationListItemDto[]>([]);
+  const [offset, setOffset] = useState(0);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-  function handleConversationPress(conv: MockConversation) {
+  const loadPage = useCallback(
+    async (fromOffset: number, append: boolean): Promise<void> => {
+      if (!sync) {
+        setItems([]);
+        setOffset(0);
+        setHasMore(false);
+        setLoadError(null);
+        setIsLoading(false);
+        setIsLoadingMore(false);
+        return;
+      }
+      if (append) {
+        setIsLoadingMore(true);
+      } else {
+        setIsLoading(true);
+      }
+      setLoadError(null);
+      try {
+        const result = await fetchChatConversationsPage(sync, fromOffset, PAGE_SIZE);
+        if (append) {
+          setItems((prev) => [...prev, ...result.items]);
+        } else {
+          setItems(result.items);
+        }
+        setOffset(fromOffset + result.items.length);
+        setHasMore(result.items.length >= PAGE_SIZE);
+      } catch (error) {
+        setLoadError(error instanceof Error ? error.message : '加载聊天失败');
+        if (!append) {
+          setItems([]);
+        }
+        setHasMore(false);
+      } finally {
+        setIsLoading(false);
+        setIsLoadingMore(false);
+      }
+    },
+    [sync],
+  );
+
+  useEffect(() => {
+    void loadPage(0, false);
+  }, [loadPage]);
+
+  function handleConversationPress(conv: ConversationListItemDto) {
     router.push(`/chat/${conv.id}` as any);
   }
 
-  function renderConversationItem({ item }: { item: MockConversation }) {
+  function renderConversationItem({ item }: { item: ConversationListItemDto }) {
     return (
       <ConversationItem
         conversation={item}
@@ -66,13 +119,32 @@ export default function MessagingScreen() {
       </Appbar.Header>
 
       <FlatList
-        data={MOCK_CONVERSATIONS}
+        data={items}
         renderItem={renderConversationItem}
         keyExtractor={extractConvKey}
         ItemSeparatorComponent={ItemSeparator}
         ListFooterComponent={ListFooter}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingTop: 4 }}
+        refreshing={isLoading && items.length === 0}
+        onRefresh={() => {
+          setOffset(0);
+          void loadPage(0, false);
+        }}
+        onEndReached={() => {
+          if (isLoading || isLoadingMore || !hasMore) {
+            return;
+          }
+          void loadPage(offset, true);
+        }}
+        onEndReachedThreshold={0.3}
+        ListEmptyComponent={
+          !isLoading ? (
+            <View style={{ paddingHorizontal: 16, paddingVertical: 24 }}>
+              <Text style={{ color: theme.colors.onSurfaceVariant }}>{loadError ?? '暂无聊天'}</Text>
+            </View>
+          ) : null
+        }
       />
 
       <FAB.Group

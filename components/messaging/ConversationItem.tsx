@@ -3,10 +3,10 @@ import { Badge, Text, TouchableRipple, useTheme } from 'react-native-paper';
 import { format, isThisYear, isToday } from 'date-fns';
 import UserAvatar from '@/components/common/UserAvatar';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import type { MockConversation } from '@/lib/mock/data';
+import type { ConversationListItemDto } from '@/lib/api/content-api';
 
 interface ConversationItemProps {
-  conversation: MockConversation;
+  conversation: ConversationListItemDto;
   onPress: () => void;
 }
 
@@ -17,7 +17,7 @@ function formatTimestamp(isoString: string): string {
   return format(date, 'yy/MM/dd');
 }
 
-function ConversationAvatar({ conversation }: { conversation: MockConversation }) {
+function ConversationAvatar({ conversation }: { conversation: ConversationListItemDto }) {
   const theme = useTheme();
   if (!conversation.isGroup) {
     return <UserAvatar uri={conversation.avatar} name={conversation.name} size={44} />;
