@@ -2,9 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import type { ReactElement } from 'react';
 import { FlatList, KeyboardAvoidingView, Platform, View } from 'react-native';
 import { Appbar, Button, Text, TextInput, useTheme } from 'react-native-paper';
-import { useLocalSearchParams } from 'expo-router';
-import { DrawerActions } from '@react-navigation/native';
-import { useNavigation } from '@react-navigation/native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { format } from 'date-fns';
@@ -117,7 +115,7 @@ function MessageBubble({
 export default function ChatScreen(): ReactElement {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
-  const navigation = useNavigation();
+  const router = useRouter();
   const params = useLocalSearchParams();
   const sync = useContentApiSync();
 
@@ -162,10 +160,6 @@ export default function ChatScreen(): ReactElement {
     void executeLoadChat();
   }, [conversationId, sync]);
 
-  function handleOpenDrawer(): void {
-    navigation.dispatch(DrawerActions.openDrawer());
-  }
-
   const executeSendMessage = useCallback(async (): Promise<void> => {
     if (!sync) {
       return;
@@ -201,16 +195,24 @@ export default function ChatScreen(): ReactElement {
   return (
     <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
       <Appbar.Header style={{ backgroundColor: theme.colors.surface }} elevated>
-        <Appbar.Action icon="menu" iconColor={theme.colors.onSurface} onPress={handleOpenDrawer} />
-        <Appbar.Content
-          title={conversation?.name ?? '聊天'}
-          titleStyle={{
-            color: theme.colors.onSurface,
-            fontWeight: '600',
-            textAlign: 'center',
-          }}
-        />
-        <Appbar.Action icon="dots-horizontal" iconColor="transparent" onPress={() => {}} />
+        <Appbar.BackAction onPress={() => router.back()} />
+        <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10, marginRight: 8 }}>
+          <UserAvatar uri={conversation?.avatar ?? ''} name={conversation?.name ?? '聊天'} size={40} />
+          <View style={{ flex: 1 }}>
+            <Text
+              variant="titleLarge"
+              numberOfLines={1}
+              style={{
+                color: theme.colors.onSurface,
+                fontWeight: '600',
+              }}
+            >
+              {conversation?.name ?? '聊天'}
+            </Text>
+          </View>
+        </View>
+        <Appbar.Action icon="phone-outline" iconColor={theme.colors.onSurface} onPress={() => {}} />
+        <Appbar.Action icon="dots-vertical" iconColor={theme.colors.onSurface} onPress={() => {}} />
       </Appbar.Header>
 
       <FlatList
