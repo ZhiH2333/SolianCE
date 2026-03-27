@@ -4,14 +4,14 @@ import { DrawerActions } from '@react-navigation/native';
 import { useNavigation } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
 import { Appbar, FAB, Text, useTheme } from 'react-native-paper';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import PostCard from '@/components/posts/PostCard';
 import type { FeedPost } from '@/lib/models/feed';
 import { fetchSpherePostsPage } from '@/lib/api/content-api';
 import { useContentApiSync } from '@/lib/hooks/use-content-api-sync';
 
-const BOTTOM_NAV_HEIGHT = 80;
 const PAGE_SIZE = 20;
+/** Tab 场景内容区已在底栏之上，FAB.Group 内部已用 safe area padding，勿再叠加底栏高度 */
+const FAB_EDGE_INSET = 8;
 
 function RenderPostItem({ item, onPress }: { item: FeedPost; onPress: (id: string) => void }) {
   return <PostCard post={item} onPress={() => onPress(item.id)} />;
@@ -23,7 +23,6 @@ function extractPostKey(item: FeedPost): string {
 
 export default function ExploreScreen() {
   const theme = useTheme();
-  const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const router = useRouter();
   const sync = useContentApiSync();
@@ -153,10 +152,7 @@ export default function ExploreScreen() {
         open={isFabOpen}
         visible
         icon={isFabOpen ? 'close' : 'plus'}
-        style={{
-          bottom: BOTTOM_NAV_HEIGHT + insets.bottom,
-          paddingBottom: 0,
-        }}
+        style={{ bottom: FAB_EDGE_INSET }}
         fabStyle={{ backgroundColor: theme.colors.primaryContainer, marginBottom: 4 }}
         color={theme.colors.onPrimaryContainer}
         actions={[
