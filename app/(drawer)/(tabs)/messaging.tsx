@@ -11,6 +11,7 @@ import ConversationItem from '@/components/messaging/ConversationItem';
 const PAGE_SIZE = 20;
 const CHAT_LAYOUT_TOKENS = {
   headerHeight: 56,
+  filterRowHeight: 52,
   listTopPadding: 4,
   listBottomSpacer: 96,
   emptyHorizontalPadding: 16,
@@ -18,6 +19,7 @@ const CHAT_LAYOUT_TOKENS = {
   fabEdgeInset: 8,
   fabMarginBottom: 4,
 } as const;
+type ConversationFilter = 'all' | 'private' | 'group';
 
 function extractConvKey(item: ConversationListItemDto): string {
   return item.id;
@@ -43,6 +45,7 @@ export default function MessagingScreen() {
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [activeFilter, setActiveFilter] = useState<ConversationFilter>('all');
 
   const loadPage = useCallback(
     async (fromOffset: number, append: boolean): Promise<void> => {
@@ -100,17 +103,29 @@ export default function MessagingScreen() {
       />
     );
   }
+  const filteredItems: ConversationListItemDto[] = items.filter((item: ConversationListItemDto) => {
+    if (activeFilter === 'all') {
+      return true;
+    }
+    if (activeFilter === 'group') {
+      return item.isGroup;
+    }
+    return !item.isGroup;
+  });
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
-      <Appbar.Header style={{ backgroundColor: theme.colors.surface }} elevated>
+      <Appbar.Header
+        style={{ backgroundColor: theme.colors.surface, height: CHAT_LAYOUT_TOKENS.headerHeight }}
+        elevated
+      >
         <Appbar.Action
           icon="menu"
           iconColor={theme.colors.onSurface}
           onPress={() => navigation.dispatch(DrawerActions.openDrawer())}
         />
         <Appbar.Content
-          title="聊天"
+          title="Solar Network"
           titleStyle={{
             color: theme.colors.onSurface,
             fontWeight: '600',
@@ -118,14 +133,40 @@ export default function MessagingScreen() {
           }}
         />
         <Appbar.Action
-          icon="menu"
-          iconColor="transparent"
-          onPress={() => {}}
+          icon="email-outline"
+          iconColor={theme.colors.onSurface}
+          onPress={() => Alert.alert('邀请', '功能开发中')}
         />
       </Appbar.Header>
+      <View
+        style={{
+          height: CHAT_LAYOUT_TOKENS.filterRowHeight,
+          backgroundColor: theme.colors.surface,
+          flexDirection: 'row',
+          alignItems: 'center',
+          paddingHorizontal: 12,
+          gap: 8,
+        }}
+      >
+        <Appbar.Action
+          icon={activeFilter === 'all' ? 'inbox' : 'inbox-outline'}
+          iconColor={theme.colors.onSurface}
+          onPress={() => setActiveFilter('all')}
+        />
+        <Appbar.Action
+          icon={activeFilter === 'private' ? 'account' : 'account-outline'}
+          iconColor={theme.colors.onSurface}
+          onPress={() => setActiveFilter('private')}
+        />
+        <Appbar.Action
+          icon={activeFilter === 'group' ? 'account-group' : 'account-group-outline'}
+          iconColor={theme.colors.onSurface}
+          onPress={() => setActiveFilter('group')}
+        />
+      </View>
 
       <FlatList
-        data={items}
+        data={filteredItems}
         renderItem={renderConversationItem}
         keyExtractor={extractConvKey}
         ItemSeparatorComponent={ItemSeparator}
