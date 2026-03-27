@@ -67,7 +67,7 @@ function MessageBubble({
   isSelf: boolean;
 }) {
   const theme = useTheme();
-  const avatarUri: string | undefined = isSelf ? undefined : conversation?.avatar;
+  const avatarUri: string | undefined = isSelf ? undefined : message.senderAvatar || undefined;
 
   const containerBackgroundColor = isSelf ? theme.colors.primaryContainer : theme.colors.surfaceVariant;
   const contentColor = isSelf ? theme.colors.onPrimaryContainer : theme.colors.onSurfaceVariant;
@@ -99,7 +99,7 @@ function MessageBubble({
         {!isSelf && avatarUri && (
           <UserAvatar
             uri={avatarUri}
-            name={conversation?.name ?? ''}
+            name={message.senderName}
             size={CHAT_ROOM_TOKENS.avatarSize}
           />
         )}

@@ -153,7 +153,7 @@ function mapJsonToConversationListItem(raw: unknown): ConversationListItemDto | 
   if (!id) {
     return null;
   }
-  const roomName: string = pickString(root, ['name', 'title']);
+  const roomName: string = pickString(root, ['name', 'title', 'display_name', 'displayName', 'alias']);
   const displayName: string = roomName.length > 0 ? roomName : '聊天';
   const avatarRoot: Record<string, unknown> | null =
     readRecord(root.avatar) ??
@@ -161,7 +161,7 @@ function mapJsonToConversationListItem(raw: unknown): ConversationListItemDto | 
     readRecord(root.profile_picture) ??
     readRecord(root.profilePicture);
   const avatar: string =
-    pickString(root, ['avatar', 'picture', 'icon']) ||
+    pickString(root, ['avatar', 'picture', 'icon', 'photo']) ||
     pickString(avatarRoot ?? {}, ['public_url', 'publicUrl', 'url']) ||
     '';
   const latestMessageRoot: Record<string, unknown> | null =
@@ -242,6 +242,7 @@ export interface ChatMessageDto {
   conversationId: string;
   senderId: string;
   senderName: string;
+  senderAvatar: string;
   content: string;
   sentAt: string;
   isEncrypted: boolean;
@@ -267,6 +268,15 @@ function mapJsonToChatMessage(raw: unknown, conversationId: string): ChatMessage
     pickString(root, ['sender_name', 'senderName', 'author_name', 'authorName']) ||
     pickString(senderRoot ?? {}, ['nick', 'name', 'uname']) ||
     '用户';
+  const senderAvatarObj: Record<string, unknown> | null =
+    readRecord(senderRoot?.avatar) ??
+    readRecord(senderRoot?.profile_picture) ??
+    readRecord(senderRoot?.profilePicture) ??
+    readRecord(senderRoot?.picture);
+  const senderAvatar: string =
+    pickString(senderRoot ?? {}, ['avatar', 'picture', 'icon']) ||
+    pickString(senderAvatarObj ?? {}, ['public_url', 'publicUrl', 'url']) ||
+    '';
   const content: string =
     pickString(root, ['body', 'content', 'text', 'message']) ||
     pickString(readRecord(root.payload) ?? {}, ['body', 'text']) ||
@@ -290,6 +300,7 @@ function mapJsonToChatMessage(raw: unknown, conversationId: string): ChatMessage
     conversationId,
     senderId,
     senderName,
+    senderAvatar,
     content,
     sentAt,
     isEncrypted,
