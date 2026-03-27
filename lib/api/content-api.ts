@@ -327,6 +327,70 @@ export async function postChatMessage(
   return mapJsonToChatMessage(data, conversationId);
 }
 
+export interface RealmListItemDto {
+  id: string;
+  name: string;
+  description: string;
+  banner: string;
+  avatar: string;
+}
+
+function mapJsonToRealmListItem(raw: unknown): RealmListItemDto | null {
+  const root: Record<string, unknown> | null = readRecord(raw);
+  if (!root) {
+    return null;
+  }
+  const id: string = pickString(root, ['id', 'slug', 'identifier']);
+  if (!id) {
+    return null;
+  }
+  const name: string = pickString(root, ['name', 'alias', 'title']) || '未命名领域';
+  const description: string = pickString(root, ['description', 'bio', 'summary']);
+  const bannerRoot: Record<string, unknown> | null =
+    readRecord(root.banner) ?? readRecord(root.background) ?? readRecord(root.cover);
+  const avatarRoot: Record<string, unknown> | null =
+    readRecord(root.avatar) ?? readRecord(root.icon) ?? readRecord(root.profile_picture);
+  const banner: string =
+    pickString(root, ['banner', 'cover', 'background']) ||
+    pickString(bannerRoot ?? {}, ['public_url', 'publicUrl', 'url']) ||
+    '';
+  const avatar: string =
+    pickString(root, ['avatar', 'icon']) ||
+    pickString(avatarRoot ?? {}, ['public_url', 'publicUrl', 'url']) ||
+    '';
+  return {
+    id,
+    name,
+    description,
+    banner,
+    avatar,
+  };
+}
+
+export async function fetchRealmsPage(
+  sync: ContentApiSync,
+  offset: number,
+  take: number,
+): Promise<{ items: RealmListItemDto[]; totalCount: number | null }> {
+  const params: URLSearchParams = new URLSearchParams({
+    offset: String(offset),
+    take: String(take),
+  });
+  const { items: rawItems, tokenPair, totalCount } = await performAuthorizedGetList(
+    `/passport/realms?${params.toString()}`,
+    sync.tokenPair,
+  );
+  await syncTokenIfChanged(sync, tokenPair);
+  const items: RealmListItemDto[] = [];
+  for (const raw of rawItems) {
+    const mapped: RealmListItemDto | null = mapJsonToRealmListItem(raw);
+    if (mapped) {
+      items.push(mapped);
+    }
+  }
+  return { items, totalCount };
+}
+
 export async function fetchNotificationUnreadCount(sync: ContentApiSync): Promise<number> {
   const { data, tokenPair } = await performAuthorizedFetch('/ring/notifications/count', { method: 'GET' }, sync.tokenPair);
   await syncTokenIfChanged(sync, tokenPair);
