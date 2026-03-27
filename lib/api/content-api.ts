@@ -224,6 +224,109 @@ export async function fetchChatConversationsPage(
   return { items, totalCount };
 }
 
+export async function fetchChatConversationById(
+  sync: ContentApiSync,
+  conversationId: string,
+): Promise<ConversationListItemDto | null> {
+  const { data, tokenPair } = await performAuthorizedFetch(
+    `/messager/chat/${encodeURIComponent(conversationId)}`,
+    { method: 'GET' },
+    sync.tokenPair,
+  );
+  await syncTokenIfChanged(sync, tokenPair);
+  return mapJsonToConversationListItem(data);
+}
+
+export interface ChatMessageDto {
+  id: string;
+  conversationId: string;
+  senderId: string;
+  senderName: string;
+  content: string;
+  sentAt: string;
+  isEncrypted: boolean;
+}
+
+function mapJsonToChatMessage(raw: unknown, conversationId: string): ChatMessageDto | null {
+  const root: Record<string, unknown> | null = readRecord(raw);
+  if (!root) {
+    return null;
+  }
+  const id: string = pickString(root, ['id', 'message_id', 'messageId']);
+  if (!id) {
+    return null;
+  }
+  const senderRoot: Record<string, unknown> | null =
+    readRecord(root.sender) ?? readRecord(root.author) ?? readRecord(root.account);
+  const senderId: string =
+    pickString(root, ['sender_id', 'senderId', 'author_id', 'authorId']) ||
+    pickString(senderRoot ?? {}, ['id', 'uid', 'account_id', 'accountId']);
+  const senderName: string =
+    pickString(root, ['sender_name', 'senderName', 'author_name', 'authorName']) ||
+    pickString(senderRoot ?? {}, ['nick', 'name', 'uname']) ||
+    '用户';
+  const content: string =
+    pickString(root, ['body', 'content', 'text', 'message']) ||
+    pickString(readRecord(root.payload) ?? {}, ['body', 'text']) ||
+    '';
+  const sentAt: string =
+    pickString(root, ['sent_at', 'sentAt', 'created_at', 'createdAt', 'timestamp']) ||
+    new Date().toISOString();
+  const encryptedRaw: unknown =
+    root.is_encrypted ?? root.isEncrypted ?? root.mls_encrypted ?? root.mlsEncrypted;
+  const isEncrypted: boolean = encryptedRaw === true;
+  return {
+    id,
+    conversationId,
+    senderId,
+    senderName,
+    content,
+    sentAt,
+    isEncrypted,
+  };
+}
+
+export async function fetchChatMessagesPage(
+  sync: ContentApiSync,
+  conversationId: string,
+  offset: number,
+  take: number,
+): Promise<{ items: ChatMessageDto[]; totalCount: number | null }> {
+  const params: URLSearchParams = new URLSearchParams({
+    offset: String(offset),
+    take: String(take),
+  });
+  const { items: rawItems, tokenPair, totalCount } = await performAuthorizedGetList(
+    `/messager/chat/${encodeURIComponent(conversationId)}/messages?${params.toString()}`,
+    sync.tokenPair,
+  );
+  await syncTokenIfChanged(sync, tokenPair);
+  const items: ChatMessageDto[] = [];
+  for (const raw of rawItems) {
+    const mapped: ChatMessageDto | null = mapJsonToChatMessage(raw, conversationId);
+    if (mapped) {
+      items.push(mapped);
+    }
+  }
+  items.sort((a, b) => new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime());
+  return { items, totalCount };
+}
+
+export async function postChatMessage(
+  sync: ContentApiSync,
+  conversationId: string,
+  content: string,
+): Promise<ChatMessageDto | null> {
+  const body: string = JSON.stringify({ content });
+  const { data, tokenPair } = await performAuthorizedFetch(
+    `/messager/chat/${encodeURIComponent(conversationId)}/messages`,
+    { method: 'POST', body },
+    sync.tokenPair,
+  );
+  await syncTokenIfChanged(sync, tokenPair);
+  return mapJsonToChatMessage(data, conversationId);
+}
+
 export async function fetchNotificationUnreadCount(sync: ContentApiSync): Promise<number> {
   const { data, tokenPair } = await performAuthorizedFetch('/ring/notifications/count', { method: 'GET' }, sync.tokenPair);
   await syncTokenIfChanged(sync, tokenPair);
