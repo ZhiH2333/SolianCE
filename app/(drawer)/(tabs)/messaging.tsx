@@ -4,13 +4,13 @@ import { DrawerActions } from '@react-navigation/native';
 import { useNavigation } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
 import { Appbar, Divider, FAB, Text, useTheme } from 'react-native-paper';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { fetchChatConversationsPage, type ConversationListItemDto } from '@/lib/api/content-api';
 import { useContentApiSync } from '@/lib/hooks/use-content-api-sync';
 
-const BOTTOM_NAV_HEIGHT = 80;
 import ConversationItem from '@/components/messaging/ConversationItem';
 const PAGE_SIZE = 20;
+/** Tab 场景内容区已在底栏之上，FAB.Group 内部已用 safe area padding，勿再叠加底栏高度 */
+const FAB_EDGE_INSET = 8;
 
 function extractConvKey(item: ConversationListItemDto): string {
   return item.id;
@@ -26,7 +26,6 @@ function ListFooter() {
 
 export default function MessagingScreen() {
   const theme = useTheme();
-  const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const router = useRouter();
   const sync = useContentApiSync();
@@ -151,10 +150,7 @@ export default function MessagingScreen() {
         open={isFabOpen}
         visible
         icon={isFabOpen ? 'close' : 'plus'}
-        style={{
-          bottom: BOTTOM_NAV_HEIGHT + insets.bottom,
-          paddingBottom: 0,
-        }}
+        style={{ bottom: FAB_EDGE_INSET }}
         fabStyle={{ backgroundColor: theme.colors.primaryContainer, marginBottom: 4 }}
         color={theme.colors.onPrimaryContainer}
         actions={[
