@@ -3,12 +3,12 @@ import {
   performAuthorizedGetAllowNotFound,
   performAuthorizedGetList,
 } from '@/lib/api/http-client';
-import type { TokenPair } from '@/lib/api/types';
+import type { TokenPair } from '@/lib/api/api-types';
 import {
   mapJsonToFeedComment,
   mapJsonToFeedPost,
   mapTimelinePayloadToPosts,
-} from '@/lib/api/map-sphere-post';
+} from '@/lib/api/feed-post-mapper';
 import type { FeedComment, FeedPost, NewsArticleSummary } from '@/lib/models/feed';
 
 function readRecord(value: unknown): Record<string, unknown> | null {
@@ -127,6 +127,123 @@ export async function fetchNotificationUnreadCount(sync: ContentApiSync): Promis
     return Number.isFinite(n) ? n : 0;
   }
   return 0;
+}
+
+export interface NotificationItemDto {
+  id: string;
+  title: string;
+  body: string;
+  createdAt: string;
+  isRead: boolean;
+  postId: string | null;
+}
+
+function mapJsonToNotificationItem(raw: unknown): NotificationItemDto | null {
+  const root: Record<string, unknown> | null = readRecord(raw);
+  if (!root) {
+    return null;
+  }
+  const id: string =
+    pickString(root, ['id', 'notification_id', 'notificationId']) ||
+    pickString(readRecord(root.data) ?? {}, ['id']) ||
+    '';
+  if (!id) {
+    return null;
+  }
+  const title: string =
+    pickString(root, ['title', 'subject', 'name']) ||
+    pickString(readRecord(root.data) ?? {}, ['title', 'subject']) ||
+    '通知';
+  const body: string =
+    pickString(root, ['body', 'content', 'message', 'description']) ||
+    pickString(readRecord(root.data) ?? {}, ['body', 'content', 'message']) ||
+    '';
+  const createdAt: string =
+    pickString(root, ['created_at', 'createdAt', 'at', 'time']) ||
+    new Date().toISOString();
+  const isReadRaw: unknown = root.is_read ?? root.isRead ?? root.read ?? false;
+  const isRead: boolean = isReadRaw === true;
+  const postId: string = ((): string => {
+    const direct: string = pickString(root, ['post_id', 'postId', 'related_post_id', 'relatedPostId']);
+    if (direct) {
+      return direct;
+    }
+    const post: Record<string, unknown> | null = readRecord(root.post);
+    if (post) {
+      return pickString(post, ['id', 'post_id', 'postId']);
+    }
+    const data: Record<string, unknown> | null = readRecord(root.data);
+    if (data) {
+      return pickString(data, ['post_id', 'postId']);
+    }
+    return '';
+  })();
+  return { id, title, body, createdAt, isRead, postId: postId || null };
+}
+
+export async function fetchNotificationsPage(
+  sync: ContentApiSync,
+  offset: number,
+  take: number,
+): Promise<{ items: NotificationItemDto[]; totalCount: number | null }> {
+  const params: URLSearchParams = new URLSearchParams({
+    offset: String(offset),
+    take: String(take),
+  });
+  const { items: rawItems, tokenPair, totalCount } = await performAuthorizedGetList(
+    `/ring/notifications?${params.toString()}`,
+    sync.tokenPair,
+  );
+  await syncTokenIfChanged(sync, tokenPair);
+  const items: NotificationItemDto[] = [];
+  for (const raw of rawItems) {
+    const mapped: NotificationItemDto | null = mapJsonToNotificationItem(raw);
+    if (mapped) {
+      items.push(mapped);
+    }
+  }
+  return { items, totalCount };
+}
+
+export async function markNotificationRead(sync: ContentApiSync, id: string): Promise<void> {
+  const endpointCandidates: Array<{ path: string; method: 'POST' | 'PATCH'; body?: unknown }> = [
+    { path: `/ring/notifications/${encodeURIComponent(id)}/read`, method: 'POST' },
+    { path: `/ring/notifications/${encodeURIComponent(id)}/mark-read`, method: 'POST' },
+    { path: `/ring/notifications/${encodeURIComponent(id)}`, method: 'PATCH', body: { is_read: true } },
+  ];
+  let lastError: unknown = null;
+  for (const endpoint of endpointCandidates) {
+    try {
+      const { tokenPair } = await performAuthorizedFetch(
+        endpoint.path,
+        {
+          method: endpoint.method,
+          body: endpoint.body ? JSON.stringify(endpoint.body) : undefined,
+        },
+        sync.tokenPair,
+      );
+      await syncTokenIfChanged(sync, tokenPair);
+      return;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error('标记已读失败');
+}
+
+export async function markAllNotificationsRead(sync: ContentApiSync): Promise<void> {
+  const endpointCandidates: string[] = ['/ring/notifications/read', '/ring/notifications/read/all'];
+  let lastError: unknown = null;
+  for (const path of endpointCandidates) {
+    try {
+      const { tokenPair } = await performAuthorizedFetch(path, { method: 'POST' }, sync.tokenPair);
+      await syncTokenIfChanged(sync, tokenPair);
+      return;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error('全部已读失败');
 }
 
 export interface AccountMeDto {

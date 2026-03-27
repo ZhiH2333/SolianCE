@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import { View } from 'react-native';
+import { useRouter } from 'expo-router';
 import { Card, IconButton, Text, useTheme } from 'react-native-paper';
 import { fetchNotificationUnreadCount } from '@/lib/api/content-api';
 import { useContentApiSync } from '@/lib/hooks/use-content-api-sync';
 
 export default function NotificationCard() {
   const theme = useTheme();
+  const router = useRouter();
   const sync = useContentApiSync();
   const [unreadCount, setUnreadCount] = useState<number>(0);
 
@@ -60,7 +62,7 @@ export default function NotificationCard() {
                 icon="arrow-right"
                 size={22}
                 iconColor={theme.colors.onSurfaceVariant}
-                onPress={() => {}}
+                onPress={() => router.push('/notifications' as any)}
               />
             </View>
           </View>

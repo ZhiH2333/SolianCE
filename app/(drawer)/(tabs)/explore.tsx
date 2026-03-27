@@ -5,6 +5,8 @@ import { useNavigation } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
 import { Appbar, FAB, Text, useTheme } from 'react-native-paper';
 import PostCard from '@/components/posts/PostCard';
+import NotificationCard from '@/components/home/NotificationCard';
+import TodayNewsCard from '@/components/home/TodayNewsCard';
 import type { FeedPost } from '@/lib/models/feed';
 import { fetchSpherePostsPage } from '@/lib/api/content-api';
 import { useContentApiSync } from '@/lib/hooks/use-content-api-sync';
@@ -15,6 +17,18 @@ const FAB_EDGE_INSET = 8;
 
 function RenderPostItem({ item, onPress }: { item: FeedPost; onPress: (id: string) => void }) {
   return <PostCard post={item} onPress={() => onPress(item.id)} />;
+}
+
+function ExploreHeader(): React.JSX.Element {
+  return (
+    <View style={{ paddingHorizontal: 8, paddingTop: 8, gap: 8 }}>
+      <TodayNewsCard />
+      <NotificationCard />
+      <Text variant="titleMedium" style={{ marginTop: 8, marginBottom: 4 }}>
+        最新帖子
+      </Text>
+    </View>
+  );
 }
 
 function extractPostKey(item: FeedPost): string {
@@ -123,6 +137,7 @@ export default function ExploreScreen() {
 
       <FlatList
         data={posts}
+        ListHeaderComponent={<ExploreHeader />}
         renderItem={({ item }) => (
           <RenderPostItem item={item} onPress={(id) => router.push(`/post/${id}`)} />
         )}
