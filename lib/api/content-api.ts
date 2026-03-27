@@ -245,6 +245,8 @@ export interface ChatMessageDto {
   content: string;
   sentAt: string;
   isEncrypted: boolean;
+  quoteSenderName: string | null;
+  quoteContent: string | null;
 }
 
 function mapJsonToChatMessage(raw: unknown, conversationId: string): ChatMessageDto | null {
@@ -275,6 +277,14 @@ function mapJsonToChatMessage(raw: unknown, conversationId: string): ChatMessage
   const encryptedRaw: unknown =
     root.is_encrypted ?? root.isEncrypted ?? root.mls_encrypted ?? root.mlsEncrypted;
   const isEncrypted: boolean = encryptedRaw === true;
+  const quoteRoot: Record<string, unknown> | null =
+    readRecord(root.quote) ?? readRecord(root.reply_to) ?? readRecord(root.replyTo);
+  const quoteSenderNameRaw: string =
+    pickString(quoteRoot ?? {}, ['sender_name', 'senderName', 'author_name', 'authorName']) ||
+    pickString(readRecord(quoteRoot?.sender) ?? {}, ['nick', 'name', 'uname']);
+  const quoteContentRaw: string =
+    pickString(quoteRoot ?? {}, ['content', 'body', 'text']) ||
+    pickString(readRecord(quoteRoot?.payload) ?? {}, ['content', 'body', 'text']);
   return {
     id,
     conversationId,
@@ -283,6 +293,8 @@ function mapJsonToChatMessage(raw: unknown, conversationId: string): ChatMessage
     content,
     sentAt,
     isEncrypted,
+    quoteSenderName: quoteSenderNameRaw.length > 0 ? quoteSenderNameRaw : null,
+    quoteContent: quoteContentRaw.length > 0 ? quoteContentRaw : null,
   };
 }
 

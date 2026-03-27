@@ -36,6 +36,10 @@ const CHAT_ROOM_TOKENS = {
   sendButtonBottom: 4,
   avatarSize: 32,
   avatarRadius: 16,
+  bubbleMaxWidth: '82%',
+  quoteRadius: 10,
+  quotePaddingHorizontal: 10,
+  quotePaddingVertical: 8,
 } as const;
 
 function sortMessagesByTime(messages: ChatMessageDto[]): ChatMessageDto[] {
@@ -64,9 +68,27 @@ function MessageBubble({
   const metaColor = isSelf ? theme.colors.onPrimaryContainer : theme.colors.outline;
   const alignSelf = isSelf ? 'flex-end' : 'flex-start';
   const bubbleBorderRadius = CHAT_ROOM_TOKENS.messageRadius;
+  const showQuote: boolean = Boolean(message.quoteSenderName || message.quoteContent);
 
   return (
-    <View style={{ alignSelf, maxWidth: '80%', marginVertical: CHAT_ROOM_TOKENS.messageItemVertical, gap: 6 }}>
+    <View
+      style={{
+        alignSelf,
+        maxWidth: CHAT_ROOM_TOKENS.bubbleMaxWidth,
+        marginVertical: CHAT_ROOM_TOKENS.messageItemVertical,
+        gap: 6,
+      }}
+    >
+      {!isSelf ? (
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <Text variant="labelMedium" style={{ color: theme.colors.onSurface, fontWeight: '600' }}>
+            {message.senderName}
+          </Text>
+          <Text variant="bodySmall" style={{ color: theme.colors.outline, fontVariant: ['tabular-nums'] }}>
+            {formatMessageTime(message.sentAt)}
+          </Text>
+        </View>
+      ) : null}
       <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: CHAT_ROOM_TOKENS.messageRowGap }}>
         {!isSelf && avatarUri && (
           <UserAvatar
@@ -83,20 +105,40 @@ function MessageBubble({
             paddingVertical: CHAT_ROOM_TOKENS.messagePaddingVertical,
           }}
         >
+          {showQuote ? (
+            <View
+              style={{
+                borderRadius: CHAT_ROOM_TOKENS.quoteRadius,
+                backgroundColor: theme.colors.primaryFixedDim + '55',
+                paddingHorizontal: CHAT_ROOM_TOKENS.quotePaddingHorizontal,
+                paddingVertical: CHAT_ROOM_TOKENS.quotePaddingVertical,
+                marginBottom: 8,
+              }}
+            >
+              <Text variant="labelSmall" style={{ color: contentColor, fontWeight: '600' }} numberOfLines={1}>
+                {message.quoteSenderName ?? '引用消息'}
+              </Text>
+              <Text variant="bodySmall" style={{ color: contentColor }} numberOfLines={2}>
+                {message.quoteContent ?? ''}
+              </Text>
+            </View>
+          ) : null}
           <Text variant="bodyMedium" style={{ color: contentColor, lineHeight: 20 }}>
             {message.content}
           </Text>
-          <Text
-            variant="bodySmall"
-            style={{
-              color: metaColor,
-              marginTop: 6,
-              textAlign: isSelf ? 'right' : 'left',
-              fontVariant: ['tabular-nums'],
-            }}
-          >
-            {formatMessageTime(message.sentAt)}
-          </Text>
+          {isSelf ? (
+            <Text
+              variant="bodySmall"
+              style={{
+                color: metaColor,
+                marginTop: 6,
+                textAlign: 'right',
+                fontVariant: ['tabular-nums'],
+              }}
+            >
+              {formatMessageTime(message.sentAt)}
+            </Text>
+          ) : null}
         </View>
         {isSelf && (
           <View
