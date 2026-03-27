@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ReactElement } from 'react';
 import { FlatList, KeyboardAvoidingView, Platform, View } from 'react-native';
 import { Appbar, Button, Text, TextInput, useTheme } from 'react-native-paper';
@@ -175,6 +175,12 @@ export default function ChatScreen(): ReactElement {
   const [isSending, setIsSending] = useState<boolean>(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [draft, setDraft] = useState<string>('');
+  const listRef = useRef<FlatList<ChatMessageDto> | null>(null);
+  const shouldScrollToLatestRef = useRef<boolean>(false);
+
+  const executeScrollToLatest = useCallback((animated: boolean): void => {
+    listRef.current?.scrollToEnd({ animated });
+  }, []);
 
   useEffect(() => {
     const executeLoadChat = async (): Promise<void> => {
@@ -196,6 +202,7 @@ export default function ChatScreen(): ReactElement {
         ]);
         setConversation(conversationResult);
         setMessages(sortMessagesByTime(messageResult.items));
+        shouldScrollToLatestRef.current = true;
         setMyAccountId(meResult?.id ?? '');
       } catch (error) {
         setLoadError(error instanceof Error ? error.message : '加载聊天失败');
@@ -221,6 +228,7 @@ export default function ChatScreen(): ReactElement {
       const sent: ChatMessageDto | null = await postChatMessage(sync, conversationId, trimmed);
       if (sent) {
         setMessages((prev: ChatMessageDto[]) => sortMessagesByTime([...prev, sent]));
+        shouldScrollToLatestRef.current = true;
       }
       setDraft('');
     } catch (error) {
@@ -264,6 +272,7 @@ export default function ChatScreen(): ReactElement {
       </Appbar.Header>
 
       <FlatList
+        ref={listRef}
         data={messages}
         renderItem={renderMessage}
         keyExtractor={(item: ChatMessageDto) => item.id}
@@ -273,6 +282,13 @@ export default function ChatScreen(): ReactElement {
           paddingBottom: CHAT_ROOM_TOKENS.messageBottomSafeArea + insets.bottom,
         }}
         showsVerticalScrollIndicator={false}
+        onContentSizeChange={() => {
+          if (!shouldScrollToLatestRef.current) {
+            return;
+          }
+          shouldScrollToLatestRef.current = false;
+          requestAnimationFrame(() => executeScrollToLatest(false));
+        }}
         ListEmptyComponent={
           !isLoading ? (
             <Text style={{ color: theme.colors.onSurfaceVariant, paddingHorizontal: 8, paddingTop: 8 }}>
