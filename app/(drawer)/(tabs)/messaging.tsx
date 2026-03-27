@@ -20,6 +20,37 @@ const CHAT_LAYOUT_TOKENS = {
   fabMarginBottom: 4,
 } as const;
 type ConversationFilter = 'all' | 'private' | 'group';
+function FilterAction({
+  active,
+  icon,
+  onPress,
+}: {
+  active: boolean;
+  icon: string;
+  onPress: () => void;
+}) {
+  return (
+    <View
+      style={{
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+    >
+      <Appbar.Action
+        icon={icon}
+        size={22}
+        onPress={onPress}
+        style={{
+          margin: 0,
+          backgroundColor: active ? '#00000012' : 'transparent',
+        }}
+      />
+    </View>
+  );
+}
 
 function extractConvKey(item: ConversationListItemDto): string {
   return item.id;
@@ -148,19 +179,19 @@ export default function MessagingScreen() {
           gap: 8,
         }}
       >
-        <Appbar.Action
+        <FilterAction
+          active={activeFilter === 'all'}
           icon={activeFilter === 'all' ? 'inbox' : 'inbox-outline'}
-          iconColor={theme.colors.onSurface}
           onPress={() => setActiveFilter('all')}
         />
-        <Appbar.Action
+        <FilterAction
+          active={activeFilter === 'private'}
           icon={activeFilter === 'private' ? 'account' : 'account-outline'}
-          iconColor={theme.colors.onSurface}
           onPress={() => setActiveFilter('private')}
         />
-        <Appbar.Action
+        <FilterAction
+          active={activeFilter === 'group'}
           icon={activeFilter === 'group' ? 'account-group' : 'account-group-outline'}
-          iconColor={theme.colors.onSurface}
           onPress={() => setActiveFilter('group')}
         />
       </View>

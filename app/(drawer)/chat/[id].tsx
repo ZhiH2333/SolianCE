@@ -45,6 +45,7 @@ const CHAT_ROOM_TOKENS = {
   inputCardVertical: 8,
   inputCardElevation: 2,
   inputActionSize: 22,
+  messageBottomSafeArea: 116,
 } as const;
 
 function sortMessagesByTime(messages: ChatMessageDto[]): ChatMessageDto[] {
@@ -269,7 +270,7 @@ export default function ChatScreen(): ReactElement {
         contentContainerStyle={{
           paddingTop: CHAT_ROOM_TOKENS.listPaddingTop,
           paddingHorizontal: CHAT_ROOM_TOKENS.listPaddingHorizontal,
-          paddingBottom: CHAT_ROOM_TOKENS.listBottomSpace + insets.bottom,
+          paddingBottom: CHAT_ROOM_TOKENS.messageBottomSafeArea + insets.bottom,
         }}
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={

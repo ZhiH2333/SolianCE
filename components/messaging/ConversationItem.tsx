@@ -71,6 +71,7 @@ export default function ConversationItem({ conversation, onPress }: Conversation
           paddingHorizontal: ITEM_TOKENS.horizontalPadding,
           paddingVertical: ITEM_TOKENS.verticalPadding,
           gap: ITEM_TOKENS.rowGap,
+          minHeight: 76,
         }}
       >
         <ConversationAvatar conversation={conversation} />
