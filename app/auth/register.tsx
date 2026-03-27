@@ -1,14 +1,19 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ReactElement } from 'react';
 import { Alert, Linking, Pressable, ScrollView, View } from 'react-native';
 import { Link, useLocalSearchParams, useRouter } from 'expo-router';
 import { ActivityIndicator, Appbar, Checkbox, Text, TextInput, TouchableRipple } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { registerAccount, validateRegister } from '@/lib/api/http-client';
 import { clearRegisterDraft, peekRegisterDraft, saveRegisterDraft } from '@/lib/auth/register-draft';
+import { resolveRegisterLanguageTag } from '@/lib/auth/register-language';
 import { V3_AUTH, V3_ICON_CIRCLE_SIZE, V3_PILL_RADIUS } from '@/lib/auth/v3-auth-theme';
 
 type RegisterStep = 0 | 1 | 2 | 3 | 4;
+
+/** 避免 React Strict Mode 下 effect 重复触发导致重复 POST */
+const completedCaptchaResumeKeys: Set<string> = new Set();
 
 export default function RegisterScreen(): ReactElement {
   const insets = useSafeAreaInsets();
@@ -26,19 +31,40 @@ export default function RegisterScreen(): ReactElement {
   const [termsAccepted, setTermsAccepted] = useState<boolean>(false);
   const [captchaToken, setCaptchaToken] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
-  const resumedRef = useRef<boolean>(false);
 
-  const finishMockRegister = useCallback(async (): Promise<void> => {
-    setIsSubmitting(true);
-    try {
-      await new Promise<void>((r) => setTimeout(r, 500));
-      Alert.alert('Welcome', 'Your account has been created (mock).', [
-        { text: 'Login', onPress: () => router.replace('/auth/login' as any) },
-      ]);
-    } finally {
-      setIsSubmitting(false);
-    }
-  }, [router]);
+  const executeSubmitRegistration = useCallback(
+    async (paramsSubmit: {
+      email: string;
+      password: string;
+      name: string;
+      nick: string;
+      captchaToken: string;
+    }): Promise<void> => {
+      setIsSubmitting(true);
+      try {
+        await validateRegister({ email: paramsSubmit.email.trim(), name: paramsSubmit.name.trim() });
+        await registerAccount({
+          captchaToken: paramsSubmit.captchaToken.trim(),
+          name: paramsSubmit.name.trim(),
+          nick: paramsSubmit.nick.trim(),
+          email: paramsSubmit.email.trim(),
+          password: paramsSubmit.password,
+          language: resolveRegisterLanguageTag(),
+        });
+        clearRegisterDraft();
+        Alert.alert(
+          'Welcome',
+          'Your account has been created. Please check your email to activate your account, then sign in.',
+          [{ text: 'Login', onPress: () => router.replace('/auth/login' as any) }],
+        );
+      } catch (err) {
+        Alert.alert('Registration failed', err instanceof Error ? err.message : 'Unknown error');
+      } finally {
+        setIsSubmitting(false);
+      }
+    },
+    [router],
+  );
 
   const emailValid: boolean = useMemo(() => {
     const t: string = email.trim();
@@ -62,7 +88,7 @@ export default function RegisterScreen(): ReactElement {
   const canFinish: boolean = captchaToken.trim().length > 0;
 
   useEffect(() => {
-    if (!derivedCaptchaToken || resumedRef.current) {
+    if (!derivedCaptchaToken) {
       return;
     }
     const draft = peekRegisterDraft();
@@ -70,7 +96,8 @@ export default function RegisterScreen(): ReactElement {
       setCaptchaToken(derivedCaptchaToken);
       return;
     }
-    resumedRef.current = true;
+    const resumeKey: string = `${derivedCaptchaToken}\n${draft.email}\n${draft.name}`;
+    const isDuplicateResume: boolean = completedCaptchaResumeKeys.has(resumeKey);
     setEmail(draft.email);
     setAffiliationSpell(draft.affiliationSpell);
     setPassword(draft.password);
@@ -79,25 +106,41 @@ export default function RegisterScreen(): ReactElement {
     setTermsAccepted(draft.termsAccepted);
     setCaptchaToken(derivedCaptchaToken);
     setStep(4);
-    clearRegisterDraft();
-    void finishMockRegister();
-  }, [derivedCaptchaToken, finishMockRegister]);
+    if (!isDuplicateResume) {
+      completedCaptchaResumeKeys.add(resumeKey);
+      void executeSubmitRegistration({
+        email: draft.email,
+        password: draft.password,
+        name: draft.name,
+        nick: draft.nick,
+        captchaToken: derivedCaptchaToken,
+      });
+    }
+  }, [derivedCaptchaToken, executeSubmitRegistration]);
 
-  function executeMockSocial(provider: string): void {
-    Alert.alert(provider, 'Third-party sign-up is not connected in this mock build.');
+  function executeThirdPartySignUp(provider: string): void {
+    Alert.alert(provider, 'Third-party sign-up is not available in this app yet.');
   }
 
-  function executeOpenCaptcha(): void {
-    saveRegisterDraft({
-      email: email.trim(),
-      affiliationSpell: affiliationSpell.trim(),
-      password,
-      name: name.trim(),
-      nick: nick.trim(),
-      termsAccepted,
-    });
-    router.push('/auth/captcha' as any);
-  }
+  const executeOpenCaptcha = useCallback(async (): Promise<void> => {
+    setIsSubmitting(true);
+    try {
+      await validateRegister({ email: email.trim(), name: name.trim() });
+      saveRegisterDraft({
+        email: email.trim(),
+        affiliationSpell: affiliationSpell.trim(),
+        password,
+        name: name.trim(),
+        nick: nick.trim(),
+        termsAccepted,
+      });
+      router.push('/auth/captcha' as any);
+    } catch (err) {
+      Alert.alert('Cannot continue', err instanceof Error ? err.message : 'Validation failed');
+    } finally {
+      setIsSubmitting(false);
+    }
+  }, [affiliationSpell, email, name, nick, password, router, termsAccepted]);
 
   const pillOutline = {
     borderRadius: V3_PILL_RADIUS,
@@ -209,7 +252,7 @@ export default function RegisterScreen(): ReactElement {
                   <TouchableRipple
                     key={p}
                     borderless
-                    onPress={() => executeMockSocial(p)}
+                    onPress={() => executeThirdPartySignUp(p)}
                     style={{
                       width: 40,
                       height: 40,
@@ -367,9 +410,15 @@ export default function RegisterScreen(): ReactElement {
               <Pressable
                 onPress={() => {
                   if (canFinish) {
-                    void finishMockRegister();
+                    void executeSubmitRegistration({
+                      email,
+                      password,
+                      name,
+                      nick,
+                      captchaToken,
+                    });
                   } else {
-                    executeOpenCaptcha();
+                    void executeOpenCaptcha();
                   }
                 }}
                 disabled={isSubmitting}

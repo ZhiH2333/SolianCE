@@ -1,5 +1,5 @@
 import { Platform } from 'react-native';
-import type { AuthFactor, AuthTokenResponse, TokenPair } from '@/lib/api/types';
+import type { AuthFactor, AuthTokenResponse, TokenPair } from '@/lib/api/api-types';
 
 export const API_BASE_URL: string = 'https://api.solian.app';
 const REFRESH_SKEW_MS: number = 30_000;
@@ -290,9 +290,28 @@ async function executeRequest<T>(pathname: string, init: RequestInit): Promise<T
   return data as T;
 }
 
+/** GET `/config/site` 返回 text/plain 站点根 URL（如 https://solian.app），非 JSON */
+export async function fetchPublicSiteBaseUrl(): Promise<string> {
+  const response: Response = await fetch(buildUrl('/config/site'), {
+    method: 'GET',
+    headers: {
+      ...DEFAULT_HEADERS,
+      Accept: 'text/plain, application/json;q=0.9, */*;q=0.8',
+    },
+  });
+  if (!response.ok) {
+    throw new Error(`请求失败: ${response.status}`);
+  }
+  const text: string = (await response.text()).trim();
+  if (!text.startsWith('http://') && !text.startsWith('https://')) {
+    throw new Error('站点配置无效');
+  }
+  return text.replace(/\/$/, '');
+}
+
+/** @deprecated 使用 fetchPublicSiteBaseUrl */
 export async function getCaptchaBaseUrl(): Promise<string> {
-  const result: string = await executeRequest<string>('/config/site', { method: 'GET' });
-  return result;
+  return fetchPublicSiteBaseUrl();
 }
 
 export async function createAuthChallenge(payload: CreateChallengePayload): Promise<CreateChallengeResult> {
