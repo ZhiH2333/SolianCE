@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ReactElement } from 'react';
 import { FlatList, KeyboardAvoidingView, Platform, View } from 'react-native';
-import { Appbar, Button, Text, TextInput, useTheme } from 'react-native-paper';
+import { Appbar, Button, IconButton, Text, TextInput, useTheme } from 'react-native-paper';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -282,6 +282,7 @@ export default function ChatScreen(): ReactElement {
           paddingBottom: CHAT_ROOM_TOKENS.messageBottomSafeArea + insets.bottom,
         }}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
         onContentSizeChange={() => {
           if (!shouldScrollToLatestRef.current) {
             return;
@@ -323,21 +324,27 @@ export default function ChatScreen(): ReactElement {
               elevation: CHAT_ROOM_TOKENS.inputCardElevation,
             }}
           >
-            <MaterialCommunityIcons
-              name="plus"
+            <IconButton
+              icon="plus"
               size={CHAT_ROOM_TOKENS.inputActionSize}
-              color={theme.colors.onSurface}
+              iconColor={theme.colors.onSurface}
+              style={{ margin: 0 }}
+              onPress={() => {}}
             />
-            <MaterialCommunityIcons
-              name="upload-outline"
+            <IconButton
+              icon="upload-outline"
               size={CHAT_ROOM_TOKENS.inputActionSize}
-              color={theme.colors.onSurface}
+              iconColor={theme.colors.onSurface}
+              style={{ margin: 0 }}
+              onPress={() => {}}
             />
             <TextInput
               mode="flat"
               placeholder={`Message in ${conversation?.name ?? '聊天'}`}
               value={draft}
               onChangeText={handleChangeDraft}
+              editable={!isSending}
+              showSoftInputOnFocus
               multiline
               dense
               style={{ flex: 1, backgroundColor: 'transparent' }}
