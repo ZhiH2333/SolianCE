@@ -12,7 +12,7 @@ import {
 } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import type { AuthFactor } from '@/lib/api/types';
+import type { AuthFactor } from '@/lib/api/api-types';
 import {
   createAuthChallenge,
   createDefaultChallengePayload,
@@ -161,8 +161,8 @@ export default function LoginScreen(): ReactElement {
     }
   }
 
-  function executeMockSocial(provider: string): void {
-    Alert.alert(provider, 'Third-party sign-in is not connected in this mock build.');
+function executeThirdPartySignIn(provider: string): void {
+  Alert.alert(provider, 'Third-party sign-in is not available in this app yet.');
   }
 
   const pillOutline = {
@@ -245,7 +245,7 @@ export default function LoginScreen(): ReactElement {
               <View style={{ flexDirection: 'row', gap: 8 }}>
                 <TouchableRipple
                   borderless
-                  onPress={() => executeMockSocial('GitHub')}
+                  onPress={() => executeThirdPartySignIn('GitHub')}
                   style={{
                     width: 40,
                     height: 40,
@@ -259,7 +259,7 @@ export default function LoginScreen(): ReactElement {
                 </TouchableRipple>
                 <TouchableRipple
                   borderless
-                  onPress={() => executeMockSocial('Google')}
+                  onPress={() => executeThirdPartySignIn('Google')}
                   style={{
                     width: 40,
                     height: 40,
@@ -273,7 +273,7 @@ export default function LoginScreen(): ReactElement {
                 </TouchableRipple>
                 <TouchableRipple
                   borderless
-                  onPress={() => executeMockSocial('Apple')}
+                  onPress={() => executeThirdPartySignIn('Apple')}
                   style={{
                     width: 40,
                     height: 40,
@@ -293,7 +293,7 @@ export default function LoginScreen(): ReactElement {
               </Pressable>
             </View>
             <Pressable
-              onPress={() => Alert.alert('Forgot password', 'Mock: password recovery is not available.')}
+              onPress={() => Alert.alert('Forgot password', 'Password recovery is not available yet.')}
               style={{ alignSelf: 'flex-end', marginTop: 12, flexDirection: 'row', alignItems: 'center', gap: 4 }}
             >
               <Text style={{ color: V3_AUTH.textMuted, fontSize: 14 }}>Forgot password</Text>
