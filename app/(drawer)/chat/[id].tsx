@@ -368,9 +368,6 @@ export default function ChatScreen(): ReactElement {
               <MaterialCommunityIcons name="send" size={18} color={theme.colors.onPrimaryContainer} />
             </Button>
           </View>
-          <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
-            {conversation?.isEncrypted ? '该频道消息为加密' : '消息由服务器同步'}
-          </Text>
         </View>
       </KeyboardAvoidingView>
     </View>
