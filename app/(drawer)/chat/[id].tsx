@@ -30,7 +30,7 @@ const CHAT_ROOM_TOKENS = {
   listBottomSpace: 96,
   inputWrapperHorizontal: 12,
   inputWrapperTop: 8,
-  inputWrapperBottomInset: 8,
+  inputWrapperBottomInset: 12,
   inputGap: 8,
   sendButtonRadius: 14,
   sendButtonBottom: 4,
@@ -40,6 +40,11 @@ const CHAT_ROOM_TOKENS = {
   quoteRadius: 10,
   quotePaddingHorizontal: 10,
   quotePaddingVertical: 8,
+  inputCardRadius: 20,
+  inputCardHorizontal: 12,
+  inputCardVertical: 8,
+  inputCardElevation: 2,
+  inputActionSize: 22,
 } as const;
 
 function sortMessagesByTime(messages: ChatMessageDto[]): ChatMessageDto[] {
@@ -289,15 +294,39 @@ export default function ChatScreen(): ReactElement {
             gap: CHAT_ROOM_TOKENS.inputGap,
           }}
         >
-          <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: CHAT_ROOM_TOKENS.inputGap }}>
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: CHAT_ROOM_TOKENS.inputGap,
+              backgroundColor: theme.colors.surface,
+              borderRadius: CHAT_ROOM_TOKENS.inputCardRadius,
+              paddingHorizontal: CHAT_ROOM_TOKENS.inputCardHorizontal,
+              paddingVertical: CHAT_ROOM_TOKENS.inputCardVertical,
+              elevation: CHAT_ROOM_TOKENS.inputCardElevation,
+            }}
+          >
+            <MaterialCommunityIcons
+              name="plus"
+              size={CHAT_ROOM_TOKENS.inputActionSize}
+              color={theme.colors.onSurface}
+            />
+            <MaterialCommunityIcons
+              name="upload-outline"
+              size={CHAT_ROOM_TOKENS.inputActionSize}
+              color={theme.colors.onSurface}
+            />
             <TextInput
-              mode="outlined"
-              label="输入消息"
+              mode="flat"
+              placeholder={`Message in ${conversation?.name ?? '聊天'}`}
               value={draft}
               onChangeText={handleChangeDraft}
               multiline
               dense
-              style={{ flex: 1 }}
+              style={{ flex: 1, backgroundColor: 'transparent' }}
+              underlineColor="transparent"
+              activeUnderlineColor="transparent"
+              contentStyle={{ minHeight: 22 }}
               maxLength={INPUT_MAX_LENGTH}
             />
             <Button
@@ -306,11 +335,13 @@ export default function ChatScreen(): ReactElement {
               onPress={() => void executeSendMessage()}
               style={{
                 borderRadius: CHAT_ROOM_TOKENS.sendButtonRadius,
-                marginBottom: CHAT_ROOM_TOKENS.sendButtonBottom,
+                marginBottom: CHAT_ROOM_TOKENS.sendButtonBottom - 2,
+                minWidth: 40,
               }}
+              contentStyle={{ width: 36, height: 36 }}
+              labelStyle={{ marginHorizontal: 0 }}
             >
               <MaterialCommunityIcons name="send" size={18} color={theme.colors.onPrimaryContainer} />
-              发送
             </Button>
           </View>
           <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
