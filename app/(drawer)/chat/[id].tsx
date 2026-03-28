@@ -50,8 +50,11 @@ const CHAT_ROOM_TOKENS = {
   messageBottomSafeArea: 116,
 } as const;
 
-function sortMessagesByTime(messages: ChatMessageDto[]): ChatMessageDto[] {
-  return [...messages].sort((a: ChatMessageDto, b: ChatMessageDto) => new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime());
+/** 最新消息在前（index 0），配合 inverted FlatList 将最新固定在底部 */
+function sortMessagesDescending(messages: ChatMessageDto[]): ChatMessageDto[] {
+  return [...messages].sort(
+    (a: ChatMessageDto, b: ChatMessageDto) => new Date(b.sentAt).getTime() - new Date(a.sentAt).getTime(),
+  );
 }
 
 function formatMessageTime(isoString: string): string {
@@ -188,13 +191,6 @@ export default function ChatScreen(): ReactElement {
   const allowLoadOlderRef = useRef<boolean>(false);
 
   useEffect(() => {
-    flatListRef.current?.scrollToEnd({ animated: false });
-    requestAnimationFrame(() => {
-      allowLoadOlderRef.current = true;
-    });
-  }, [messages]);
-
-  useEffect(() => {
     if (!conversationId) {
       return;
     }
@@ -229,7 +225,7 @@ export default function ChatScreen(): ReactElement {
           fetchAccountMe(sync),
         ]);
         setConversation(conversationResult);
-        setMessages(sortMessagesByTime(messageWindow.items));
+        setMessages(sortMessagesDescending(messageWindow.items));
         setOldestLoadedOffset(messageWindow.oldestLoadedOffset);
         setHasMoreOlder(messageWindow.hasMoreOlder);
         setMyAccountId(meResult?.id ?? '');
@@ -256,7 +252,7 @@ export default function ChatScreen(): ReactElement {
     try {
       const sent: ChatMessageDto | null = await postChatMessage(sync, conversationId, trimmed);
       if (sent) {
-        setMessages((prev: ChatMessageDto[]) => mergeChatMessagesById(prev, [sent]));
+        setMessages((prev: ChatMessageDto[]) => sortMessagesDescending(mergeChatMessagesById(prev, [sent])));
       }
       setDraft('');
     } catch (error) {
@@ -285,7 +281,7 @@ export default function ChatScreen(): ReactElement {
         oldestLoadedOffset,
         MESSAGE_PAGE_SIZE,
       );
-      setMessages((prev: ChatMessageDto[]) => mergeChatMessagesById(prev, chunk.items));
+      setMessages((prev: ChatMessageDto[]) => sortMessagesDescending(mergeChatMessagesById(prev, chunk.items)));
       setOldestLoadedOffset(chunk.nextOldestOffset);
       setHasMoreOlder(chunk.hasMoreOlder);
     } catch (error) {
@@ -355,7 +351,6 @@ export default function ChatScreen(): ReactElement {
             </View>
           ) : null
         }
-        onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
         ListEmptyComponent={
           !isLoading ? (
             <Text style={{ color: theme.colors.onSurfaceVariant, paddingHorizontal: 8, paddingTop: 8 }}>
