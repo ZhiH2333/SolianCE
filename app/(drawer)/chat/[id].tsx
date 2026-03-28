@@ -10,7 +10,6 @@ import UserAvatar from '@/components/common/UserAvatar';
 import {
   fetchAccountMe,
   fetchChatConversationById,
-  fetchChatMessagesInitialWindow,
   fetchChatMessagesPage,
   mergeChatMessagesById,
   postChatMessage,
@@ -20,9 +19,10 @@ import {
 import { useContentApiSync } from '@/lib/hooks/use-content-api-sync';
 
 const INPUT_MAX_LENGTH = 800;
-/** 首屏与循环分页、仅保留最新条数均使用同一页大小 */
-const MESSAGE_PAGE_SIZE = 20;
-const SNACKBAR_LONG_DURATION_MS = 86400000;
+const INITIAL_LOAD_SIZE = 100;
+const PAGINATION_SIZE = 200;
+const TRUNCATE_SIZE = 20;
+
 const CHAT_ROOM_TOKENS = {
   messageRadius: 16,
   messagePaddingHorizontal: 12,
@@ -178,57 +178,62 @@ export default function ChatScreen(): ReactElement {
   const [isSending, setIsSending] = useState<boolean>(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [draft, setDraft] = useState<string>('');
-  const [oldestLoadedOffset, setOldestLoadedOffset] = useState<number>(0);
-  const [hasMore, setHasMore] = useState<boolean>(false);
-  const [loadingMore, setLoadingMore] = useState<boolean>(false);
+  const [oldestOffset, setOldestOffset] = useState<number>(0);
+  const [hasMoreOlder, setHasMoreOlder] = useState<boolean>(false);
+  const [isLoadingOlder, setIsLoadingOlder] = useState<boolean>(false);
   const [syncHint, setSyncHint] = useState<string | null>(null);
-  const [loadedCount, setLoadedCount] = useState<number>(0);
-  const [totalCount, setTotalCount] = useState<number>(0);
-  const [round, setRound] = useState<number>(1);
-  const [isPaused, setIsPaused] = useState<boolean>(false);
   const [showTimeoutSnackbar, setShowTimeoutSnackbar] = useState<boolean>(false);
+  const [serverTotalCount, setServerTotalCount] = useState<number | null>(null);
 
   const isLoadingRef = useRef<boolean>(false);
-  const isPausedRef = useRef<boolean>(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const snackbarShown = useRef<boolean>(false);
-  const loadOlderBusyRef = useRef<boolean>(false);
-  const allowLoadOlderRef = useRef<boolean>(false);
   const loopGenerationRef = useRef<number>(0);
+  const loadOlderBusyRef = useRef<boolean>(false);
 
-  const startLoadingLoop = useCallback(async (): Promise<void> => {
+  const handleLoadLatestOnly = useCallback((): void => {
+    loopGenerationRef.current += 1;
+    isLoadingRef.current = false;
+    setIsLoading(false);
+    setShowTimeoutSnackbar(false);
+    setSyncHint(null);
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+    setMessages((prev: ChatMessageDto[]) => prev.slice(0, TRUNCATE_SIZE));
+    setOldestOffset(TRUNCATE_SIZE);
+    setHasMoreOlder(true);
+    setServerTotalCount(null);
+  }, []);
+
+  const startInitialLoad = useCallback(async (): Promise<void> => {
     if (!sync || !conversationId) {
       setConversation(null);
       setMessages([]);
       setMyAccountId('');
       setIsLoading(false);
       setLoadError(null);
-      allowLoadOlderRef.current = false;
+      setOldestOffset(0);
+      setHasMoreOlder(false);
+      setServerTotalCount(null);
       setSyncHint(null);
-      setLoadedCount(0);
-      setTotalCount(0);
-      setRound(1);
+      isLoadingRef.current = false;
       return;
     }
-    if (isLoadingRef.current) {
-      return;
-    }
-    const generation: number = ++loopGenerationRef.current;
+
+    loopGenerationRef.current += 1;
+    const generation: number = loopGenerationRef.current;
     isLoadingRef.current = true;
     snackbarShown.current = false;
-    isPausedRef.current = false;
-    setIsPaused(false);
-    setShowTimeoutSnackbar(false);
-    allowLoadOlderRef.current = false;
     setIsLoading(true);
     setLoadError(null);
     setMessages([]);
-    setOldestLoadedOffset(0);
-    setHasMore(false);
-    setLoadedCount(0);
-    setTotalCount(0);
-    setRound(1);
-    setSyncHint('正在加载消息...');
+    setOldestOffset(0);
+    setHasMoreOlder(false);
+    setServerTotalCount(null);
+    setShowTimeoutSnackbar(false);
+    setSyncHint(`正在加载消息（${INITIAL_LOAD_SIZE} 条）...`);
 
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
@@ -251,62 +256,32 @@ export default function ChatScreen(): ReactElement {
       setConversation(conversationResult);
       setMyAccountId(meResult?.id ?? '');
 
-      const messageWindow = await fetchChatMessagesInitialWindow(sync, conversationId, MESSAGE_PAGE_SIZE);
+      const page: { items: ChatMessageDto[]; totalCount: number | null } = await fetchChatMessagesPage(
+        sync,
+        conversationId,
+        0,
+        INITIAL_LOAD_SIZE,
+      );
       if (generation !== loopGenerationRef.current) {
         return;
       }
-      let merged: ChatMessageDto[] = sortMessagesDescending(messageWindow.items);
-      let nextOldestOffset: number = messageWindow.oldestLoadedOffset;
-      let moreOlder: boolean = messageWindow.hasMoreOlder;
-      const total: number = messageWindow.totalCount ?? merged.length;
-      setTotalCount(total);
-      setLoadedCount(merged.length);
-      setMessages(merged);
-      setOldestLoadedOffset(nextOldestOffset);
-      setHasMore(moreOlder);
-      setRound(1);
-      setSyncHint(`正在加载消息 ${merged.length}/${total || '...'} 第1轮`);
-
-      let currentRound: number = 1;
-      while (moreOlder && isLoadingRef.current && generation === loopGenerationRef.current) {
-        while (isPausedRef.current && isLoadingRef.current && generation === loopGenerationRef.current) {
-          await new Promise<void>((resolve) => {
-            setTimeout(resolve, 300);
-          });
-        }
-        if (!isLoadingRef.current || generation !== loopGenerationRef.current) {
-          break;
-        }
-        currentRound += 1;
-        setRound(currentRound);
-        setSyncHint(`正在加载消息 ${merged.length}/${total || '...'} 第${currentRound}轮`);
-
-        const pageOffset: number = Math.max(0, nextOldestOffset - MESSAGE_PAGE_SIZE);
-        const page: { items: ChatMessageDto[]; totalCount: number | null } = await fetchChatMessagesPage(
-          sync,
-          conversationId,
-          pageOffset,
-          MESSAGE_PAGE_SIZE,
-        );
-        if (generation !== loopGenerationRef.current) {
-          break;
-        }
-        merged = sortMessagesDescending(mergeChatMessagesById(merged, page.items));
-        nextOldestOffset = pageOffset;
-        moreOlder = pageOffset > 0;
-        setMessages(merged);
-        setOldestLoadedOffset(nextOldestOffset);
-        setHasMore(moreOlder);
-        setLoadedCount(merged.length);
-        if (page.totalCount !== null) {
-          setTotalCount(page.totalCount);
-        }
+      const sorted: ChatMessageDto[] = sortMessagesDescending(page.items);
+      setMessages(sorted);
+      setOldestOffset(INITIAL_LOAD_SIZE);
+      const total: number | null = page.totalCount;
+      setServerTotalCount(total);
+      if (total !== null) {
+        setHasMoreOlder(total > INITIAL_LOAD_SIZE);
+      } else {
+        setHasMoreOlder(page.items.length >= INITIAL_LOAD_SIZE);
       }
     } catch (error) {
       if (generation === loopGenerationRef.current) {
         setLoadError(error instanceof Error ? error.message : '加载聊天失败');
         setConversation(null);
         setMessages([]);
+        setHasMoreOlder(false);
+        setServerTotalCount(null);
       }
     } finally {
       if (generation === loopGenerationRef.current) {
@@ -317,15 +292,12 @@ export default function ChatScreen(): ReactElement {
         isLoadingRef.current = false;
         setIsLoading(false);
         setSyncHint(null);
-        requestAnimationFrame(() => {
-          allowLoadOlderRef.current = true;
-        });
       }
     }
   }, [conversationId, sync]);
 
   useEffect(() => {
-    void startLoadingLoop();
+    void startInitialLoad();
     return () => {
       loopGenerationRef.current += 1;
       isLoadingRef.current = false;
@@ -334,7 +306,48 @@ export default function ChatScreen(): ReactElement {
         timeoutRef.current = null;
       }
     };
-  }, [startLoadingLoop]);
+  }, [startInitialLoad]);
+
+  const loadMoreOlderMessages = useCallback(async (): Promise<void> => {
+    if (!sync || !conversationId || isLoadingOlder || loadOlderBusyRef.current || !hasMoreOlder) {
+      return;
+    }
+    const generationAtStart: number = loopGenerationRef.current;
+    loadOlderBusyRef.current = true;
+    setIsLoadingOlder(true);
+    try {
+      const page: { items: ChatMessageDto[]; totalCount: number | null } = await fetchChatMessagesPage(
+        sync,
+        conversationId,
+        oldestOffset,
+        PAGINATION_SIZE,
+      );
+      if (generationAtStart !== loopGenerationRef.current) {
+        return;
+      }
+      if (page.totalCount !== null) {
+        setServerTotalCount(page.totalCount);
+      }
+      setMessages((prev: ChatMessageDto[]) =>
+        sortMessagesDescending(mergeChatMessagesById(prev, page.items)),
+      );
+      const nextOffset: number = oldestOffset + PAGINATION_SIZE;
+      setOldestOffset(nextOffset);
+      const total: number | null = page.totalCount ?? serverTotalCount;
+      if (total !== null) {
+        setHasMoreOlder(nextOffset < total);
+      } else {
+        setHasMoreOlder(page.items.length >= PAGINATION_SIZE);
+      }
+    } catch (error) {
+      if (generationAtStart === loopGenerationRef.current) {
+        setLoadError(error instanceof Error ? error.message : '加载更早消息失败');
+      }
+    } finally {
+      setIsLoadingOlder(false);
+      loadOlderBusyRef.current = false;
+    }
+  }, [sync, conversationId, hasMoreOlder, isLoadingOlder, oldestOffset, serverTotalCount]);
 
   const executeSendMessage = useCallback(async (): Promise<void> => {
     if (!sync) {
@@ -358,44 +371,6 @@ export default function ChatScreen(): ReactElement {
     }
   }, [conversationId, draft, sync]);
 
-  const executeLoadOlderMessages = useCallback(async (): Promise<void> => {
-    if (!allowLoadOlderRef.current) {
-      return;
-    }
-    if (!sync || !conversationId || !hasMore || loadingMore || loadOlderBusyRef.current) {
-      return;
-    }
-    if (oldestLoadedOffset <= 0) {
-      return;
-    }
-    loadOlderBusyRef.current = true;
-    setLoadingMore(true);
-    try {
-      const pageOffset: number = Math.max(0, oldestLoadedOffset - MESSAGE_PAGE_SIZE);
-      const page: { items: ChatMessageDto[]; totalCount: number | null } = await fetchChatMessagesPage(
-        sync,
-        conversationId,
-        pageOffset,
-        MESSAGE_PAGE_SIZE,
-      );
-      setMessages((prev: ChatMessageDto[]) => {
-        const next: ChatMessageDto[] = sortMessagesDescending(mergeChatMessagesById(prev, page.items));
-        setLoadedCount(next.length);
-        return next;
-      });
-      setOldestLoadedOffset(pageOffset);
-      setHasMore(pageOffset > 0);
-      if (page.totalCount !== null) {
-        setTotalCount(page.totalCount);
-      }
-    } catch (error) {
-      setLoadError(error instanceof Error ? error.message : '加载更早消息失败');
-    } finally {
-      setLoadingMore(false);
-      loadOlderBusyRef.current = false;
-    }
-  }, [sync, conversationId, hasMore, loadingMore, oldestLoadedOffset]);
-
   function handleChangeDraft(value: string): void {
     if (value.length > INPUT_MAX_LENGTH) return;
     setDraft(value);
@@ -405,6 +380,9 @@ export default function ChatScreen(): ReactElement {
     const isSelf: boolean = myAccountId.length > 0 ? item.senderId === myAccountId : false;
     return <MessageBubble message={item} isSelf={isSelf} />;
   }
+
+  const keyboardBehavior: 'padding' | 'height' | undefined =
+    Platform.OS === 'ios' ? 'padding' : Platform.OS === 'android' ? 'height' : undefined;
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
@@ -432,43 +410,12 @@ export default function ChatScreen(): ReactElement {
       {syncHint ? (
         <View
           style={{
-            flexDirection: 'row',
-            alignItems: 'center',
             backgroundColor: theme.colors.inverseSurface,
             paddingHorizontal: 16,
             paddingVertical: 8,
-            gap: 8,
           }}
         >
-          <Text
-            style={{
-              flex: 1,
-              color: theme.colors.inverseOnSurface,
-              fontSize: 13,
-            }}
-          >
-            {syncHint}
-          </Text>
-          <IconButton
-            icon={isPaused ? 'play' : 'pause'}
-            iconColor={theme.colors.inverseOnSurface}
-            size={18}
-            style={{ margin: 0 }}
-            onPress={() => {
-              const nextPaused: boolean = !isPausedRef.current;
-              isPausedRef.current = nextPaused;
-              setIsPaused(nextPaused);
-              setSyncHint((prev: string | null) => {
-                if (!prev) {
-                  return prev;
-                }
-                if (nextPaused) {
-                  return prev.replace(/^正在加载/, '已暂停 ');
-                }
-                return prev.replace(/^已暂停 /, '正在加载');
-              });
-            }}
-          />
+          <Text style={{ color: theme.colors.inverseOnSurface, fontSize: 13 }}>{syncHint}</Text>
         </View>
       ) : null}
 
@@ -485,11 +432,11 @@ export default function ChatScreen(): ReactElement {
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
         onEndReached={() => {
-          void executeLoadOlderMessages();
+          void loadMoreOlderMessages();
         }}
-        onEndReachedThreshold={0.3}
+        onEndReachedThreshold={0.5}
         ListFooterComponent={
-          loadingMore ? (
+          isLoadingOlder ? (
             <View style={{ paddingVertical: 8, alignItems: 'center' }}>
               <ActivityIndicator color={theme.colors.primary} />
             </View>
@@ -504,10 +451,7 @@ export default function ChatScreen(): ReactElement {
         }
       />
 
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
-      >
+      <KeyboardAvoidingView behavior={keyboardBehavior} keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}>
         <View
           style={{
             paddingHorizontal: CHAT_ROOM_TOKENS.inputWrapperHorizontal,
@@ -579,32 +523,10 @@ export default function ChatScreen(): ReactElement {
       <Snackbar
         visible={showTimeoutSnackbar}
         onDismiss={() => setShowTimeoutSnackbar(false)}
-        duration={SNACKBAR_LONG_DURATION_MS}
+        duration={Infinity}
         action={{
           label: '只加载最新',
-          onPress: () => {
-            loopGenerationRef.current += 1;
-            isLoadingRef.current = false;
-            isPausedRef.current = false;
-            setIsPaused(false);
-            setIsLoading(false);
-            setSyncHint(null);
-            setShowTimeoutSnackbar(false);
-            if (timeoutRef.current) {
-              clearTimeout(timeoutRef.current);
-              timeoutRef.current = null;
-            }
-            setMessages((prev: ChatMessageDto[]) => {
-              const sliced: ChatMessageDto[] = prev.slice(0, MESSAGE_PAGE_SIZE);
-              setLoadedCount(sliced.length);
-              return sliced;
-            });
-            setOldestLoadedOffset(0);
-            setHasMore(false);
-            requestAnimationFrame(() => {
-              allowLoadOlderRef.current = true;
-            });
-          },
+          onPress: handleLoadLatestOnly,
         }}
       >
         加载时间过长，是否只显示最新消息？
@@ -612,4 +534,3 @@ export default function ChatScreen(): ReactElement {
     </View>
   );
 }
-
