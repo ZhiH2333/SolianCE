@@ -281,7 +281,10 @@ export default function ComposeScreen(): React.JSX.Element {
                 mode="flat"
                 underlineColor="transparent"
                 activeUnderlineColor="transparent"
+                cursorColor={theme.colors.primary}
+                selectionColor={theme.colors.primaryContainer}
                 style={{
+                  color: theme.colors.onSurface,
                   backgroundColor: 'transparent',
                   fontSize: titleFont.fontSize,
                   fontWeight: titleFont.fontWeight,
@@ -298,7 +301,10 @@ export default function ComposeScreen(): React.JSX.Element {
                 activeUnderlineColor="transparent"
                 multiline
                 numberOfLines={3}
+                cursorColor={theme.colors.primary}
+                selectionColor={theme.colors.primaryContainer}
                 style={{
+                  color: theme.colors.onSurface,
                   backgroundColor: 'transparent',
                   marginBottom: 0,
                 }}
@@ -313,7 +319,12 @@ export default function ComposeScreen(): React.JSX.Element {
                 activeUnderlineColor="transparent"
                 multiline
                 autoFocus
-                style={{ backgroundColor: 'transparent' }}
+                cursorColor={theme.colors.primary}
+                selectionColor={theme.colors.primaryContainer}
+                style={{
+                  color: theme.colors.onSurface,
+                  backgroundColor: 'transparent',
+                }}
                 contentStyle={{ paddingHorizontal: 8, paddingVertical: 8 }}
               />
               <View style={{ height: 8 }} />
