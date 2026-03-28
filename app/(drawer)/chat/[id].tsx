@@ -57,9 +57,8 @@ function sortMessagesDescending(messages: ChatMessageDto[]): ChatMessageDto[] {
   );
 }
 
-function formatMessageTime(isoString: string): string {
-  const date = new Date(isoString);
-  return format(date, 'HH:mm');
+function formatMessageFullDateTime(isoString: string): string {
+  return format(new Date(isoString), 'yyyy/M/d HH:mm');
 }
 
 function MessageBubble({
@@ -73,7 +72,6 @@ function MessageBubble({
 
   const containerBackgroundColor = isSelf ? theme.colors.primaryContainer : theme.colors.surfaceVariant;
   const contentColor = isSelf ? theme.colors.onPrimaryContainer : theme.colors.onSurfaceVariant;
-  const metaColor = isSelf ? theme.colors.onPrimaryContainer : theme.colors.outline;
   const alignSelf = isSelf ? 'flex-end' : 'flex-start';
   const bubbleBorderRadius = CHAT_ROOM_TOKENS.messageRadius;
   const showQuote: boolean = Boolean(message.quoteSenderName || message.quoteContent);
@@ -92,9 +90,6 @@ function MessageBubble({
           <Text variant="labelMedium" style={{ color: theme.colors.onSurface, fontWeight: '600' }}>
             {message.senderName}
           </Text>
-          <Text variant="bodySmall" style={{ color: theme.colors.outline, fontVariant: ['tabular-nums'] }}>
-            {formatMessageTime(message.sentAt)}
-          </Text>
         </View>
       ) : null}
       <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: CHAT_ROOM_TOKENS.messageRowGap }}>
@@ -105,52 +100,52 @@ function MessageBubble({
             size={CHAT_ROOM_TOKENS.avatarSize}
           />
         ) : null}
-        <View
-          style={{
-            backgroundColor: containerBackgroundColor,
-            borderRadius: bubbleBorderRadius,
-            paddingHorizontal: CHAT_ROOM_TOKENS.messagePaddingHorizontal,
-            paddingVertical: CHAT_ROOM_TOKENS.messagePaddingVertical,
-          }}
-        >
-          {showQuote ? (
-            <View
-              style={{
-                borderRadius: CHAT_ROOM_TOKENS.quoteRadius,
-                backgroundColor:
-                  'primaryFixedDim' in theme.colors &&
-                  typeof (theme.colors as { primaryFixedDim?: string }).primaryFixedDim === 'string'
-                    ? (theme.colors as { primaryFixedDim: string }).primaryFixedDim + '55'
-                    : theme.colors.surfaceVariant,
-                paddingHorizontal: CHAT_ROOM_TOKENS.quotePaddingHorizontal,
-                paddingVertical: CHAT_ROOM_TOKENS.quotePaddingVertical,
-                marginBottom: 8,
-              }}
-            >
-              <Text variant="labelSmall" style={{ color: contentColor, fontWeight: '600' }} numberOfLines={1}>
-                {message.quoteSenderName ?? '引用消息'}
-              </Text>
-              <Text variant="bodySmall" style={{ color: contentColor }} numberOfLines={2}>
-                {message.quoteContent ?? ''}
-              </Text>
-            </View>
-          ) : null}
-          <Text variant="bodyMedium" style={{ color: contentColor, lineHeight: 20 }}>
-            {message.content}
-          </Text>
-          {isSelf ? (
-            <Text
-              variant="bodySmall"
-              style={{
-                color: metaColor,
-                marginTop: 6,
-                textAlign: 'right',
-                fontVariant: ['tabular-nums'],
-              }}
-            >
-              {formatMessageTime(message.sentAt)}
+        <View style={{ maxWidth: CHAT_ROOM_TOKENS.bubbleMaxWidth }}>
+          <View
+            style={{
+              backgroundColor: containerBackgroundColor,
+              borderRadius: bubbleBorderRadius,
+              paddingHorizontal: CHAT_ROOM_TOKENS.messagePaddingHorizontal,
+              paddingVertical: CHAT_ROOM_TOKENS.messagePaddingVertical,
+            }}
+          >
+            {showQuote ? (
+              <View
+                style={{
+                  borderRadius: CHAT_ROOM_TOKENS.quoteRadius,
+                  backgroundColor:
+                    'primaryFixedDim' in theme.colors &&
+                    typeof (theme.colors as { primaryFixedDim?: string }).primaryFixedDim === 'string'
+                      ? (theme.colors as { primaryFixedDim: string }).primaryFixedDim + '55'
+                      : theme.colors.surfaceVariant,
+                  paddingHorizontal: CHAT_ROOM_TOKENS.quotePaddingHorizontal,
+                  paddingVertical: CHAT_ROOM_TOKENS.quotePaddingVertical,
+                  marginBottom: 8,
+                }}
+              >
+                <Text variant="labelSmall" style={{ color: contentColor, fontWeight: '600' }} numberOfLines={1}>
+                  {message.quoteSenderName ?? '引用消息'}
+                </Text>
+                <Text variant="bodySmall" style={{ color: contentColor }} numberOfLines={2}>
+                  {message.quoteContent ?? ''}
+                </Text>
+              </View>
+            ) : null}
+            <Text variant="bodyMedium" style={{ color: contentColor, lineHeight: 20 }}>
+              {message.content}
             </Text>
-          ) : null}
+          </View>
+          <Text
+            style={{
+              marginTop: 4,
+              fontSize: 11,
+              color: theme.colors.onSurfaceVariant,
+              textAlign: isSelf ? 'right' : 'left',
+              fontVariant: ['tabular-nums'],
+            }}
+          >
+            {formatMessageFullDateTime(message.sentAt)}
+          </Text>
         </View>
         {isSelf && (
           <View
