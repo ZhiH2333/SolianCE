@@ -313,7 +313,8 @@ export default function ChatScreen(): ReactElement {
 
       <FlatList
         ref={listRef}
-        data={messages}
+        inverted={true}
+        data={[...messages].reverse()}
         renderItem={renderMessage}
         keyExtractor={(item: ChatMessageDto) => item.id}
         contentContainerStyle={{
