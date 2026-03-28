@@ -39,6 +39,90 @@ function resolveMediaUrl(raw: string): string {
   return `${API_BASE_URL}/drive/files/${raw}`;
 }
 
+/**
+ * 与 `mapJsonToConversationListItem` 中会话 picture 一致：嵌套 url、file_meta、id/hash → Drive。
+ */
+function resolvePictureUrlFromFileLike(blob: unknown): string {
+  const avatarRoot: Record<string, unknown> | null = readRecord(blob);
+  if (!avatarRoot) {
+    return '';
+  }
+  const avatarUrlValue: unknown = avatarRoot.url ?? null;
+  const avatarUrlRoot: Record<string, unknown> | null = readRecord(avatarUrlValue);
+  const avatarUrlFromValue: string = ((): string => {
+    if (typeof avatarUrlValue === 'string' && avatarUrlValue.length > 0) {
+      return avatarUrlValue;
+    }
+    const urlRecord: Record<string, unknown> | null = readRecord(avatarUrlValue);
+    if (urlRecord) {
+      return pickString(urlRecord, ['public_url', 'publicUrl', 'url', 'download_url', 'downloadUrl']);
+    }
+    return '';
+  })();
+  const avatarUrlFromMeta: string = ((): string => {
+    const fileMeta: Record<string, unknown> | null = readRecord(avatarRoot.file_meta ?? null);
+    const userMeta: Record<string, unknown> | null = readRecord(avatarRoot.user_meta ?? null);
+    return (
+      pickString(fileMeta ?? {}, ['public_url', 'publicUrl', 'url', 'download_url', 'downloadUrl']) ||
+      pickString(userMeta ?? {}, ['public_url', 'publicUrl', 'url', 'download_url', 'downloadUrl']) ||
+      ''
+    );
+  })();
+  const fileId: string = pickString(avatarRoot, ['id', 'hash']);
+  const avatarUrlFromId: string = fileId.length > 0 ? resolveMediaUrl(fileId) : '';
+  return (
+    pickString(avatarRoot, ['public_url', 'publicUrl', 'url', 'download_url', 'downloadUrl']) ||
+    pickString(avatarUrlRoot ?? {}, ['public_url', 'publicUrl', 'url', 'download_url', 'downloadUrl']) ||
+    avatarUrlFromMeta ||
+    avatarUrlFromValue ||
+    avatarUrlFromId ||
+    ''
+  );
+}
+
+/** 与 DM 成员 `account` + `account.profile.picture` 头像解析一致。 */
+function resolvePortraitFromAccountRecord(account: Record<string, unknown> | null): string {
+  if (!account) {
+    return '';
+  }
+  const accountProfile: Record<string, unknown> | null = readRecord(account.profile ?? null);
+  const avatarObj: Record<string, unknown> | null =
+    readRecord(account.avatar) ??
+    readRecord(account.picture) ??
+    readRecord(account.profile_picture) ??
+    readRecord(account.profilePicture) ??
+    readRecord(accountProfile?.avatar) ??
+    readRecord(accountProfile?.picture) ??
+    readRecord(accountProfile?.profile_picture) ??
+    readRecord(accountProfile?.profilePicture) ??
+    null;
+  const fromFileLike: string =
+    resolvePictureUrlFromFileLike(account.avatar) ||
+    resolvePictureUrlFromFileLike(account.picture) ||
+    resolvePictureUrlFromFileLike(accountProfile?.picture) ||
+    resolvePictureUrlFromFileLike(accountProfile?.avatar) ||
+    '';
+  if (fromFileLike.length > 0) {
+    return fromFileLike;
+  }
+  const direct: string =
+    pickString(account, ['avatar', 'picture', 'icon', 'photo']) ||
+    pickString(accountProfile ?? {}, ['avatar', 'picture', 'icon', 'photo']) ||
+    pickString(avatarObj ?? {}, ['public_url', 'publicUrl', 'url', 'download_url', 'downloadUrl']) ||
+    '';
+  if (direct.length > 0) {
+    return resolveMediaUrl(direct);
+  }
+  const fallbackId: string =
+    pickString(avatarObj ?? {}, ['id', 'hash']) ||
+    pickString(account, ['avatar_id', 'avatarId', 'picture_id', 'pictureId']) ||
+    pickString(accountProfile ?? {}, ['avatar_id', 'avatarId', 'picture_id', 'pictureId']);
+  if (fallbackId.length === 0) {
+    return '';
+  }
+  return resolveMediaUrl(fallbackId);
+}
+
 /** 已登录请求所需的 token + 写回上下文（刷新 access token 后同步） */
 export interface ContentApiSync {
   tokenPair: TokenPair;
@@ -378,21 +462,12 @@ function mapJsonToChatMessage(raw: unknown, conversationId: string): ChatMessage
     pickString(senderRoot ?? {}, ['nick', 'name', 'uname', 'username', 'display_name', 'displayName']) ||
     pickString(senderAccountRoot ?? {}, ['nick', 'name', 'uname', 'username', 'display_name', 'displayName']) ||
     '用户';
-  const senderAvatarObj: Record<string, unknown> | null =
-    readRecord(senderRoot?.avatar) ??
-    readRecord(senderRoot?.profile_picture) ??
-    readRecord(senderRoot?.profilePicture) ??
-    readRecord(senderRoot?.picture);
-  const senderAvatarObjFromAccount: Record<string, unknown> | null =
-    readRecord(senderAccountRoot?.avatar) ??
-    readRecord(senderAccountRoot?.profile_picture) ??
-    readRecord(senderAccountRoot?.profilePicture) ??
-    readRecord(senderAccountRoot?.picture);
   const senderAvatar: string =
+    resolvePictureUrlFromFileLike(senderRoot?.picture) ||
+    resolvePictureUrlFromFileLike(senderRoot?.avatar) ||
     pickString(senderRoot ?? {}, ['avatar', 'picture', 'icon']) ||
-    pickString(senderAvatarObj ?? {}, ['public_url', 'publicUrl', 'url']) ||
-    pickString(senderAccountRoot ?? {}, ['avatar', 'picture', 'icon']) ||
-    pickString(senderAvatarObjFromAccount ?? {}, ['public_url', 'publicUrl', 'url']) ||
+    resolvePortraitFromAccountRecord(senderAccountRoot) ||
+    resolvePortraitFromAccountRecord(senderRoot) ||
     '';
   const content: string =
     pickString(root, ['body', 'content', 'text', 'message']) ||
@@ -450,6 +525,94 @@ export async function fetchChatMessagesPage(
   }
   items.sort((a, b) => new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime());
   return { items, totalCount };
+}
+
+export function mergeChatMessagesById(
+  previous: ChatMessageDto[],
+  incoming: ChatMessageDto[],
+): ChatMessageDto[] {
+  const map: Map<string, ChatMessageDto> = new Map<string, ChatMessageDto>();
+  for (const m of previous) {
+    map.set(m.id, m);
+  }
+  for (const m of incoming) {
+    map.set(m.id, m);
+  }
+  return [...map.values()].sort(
+    (a: ChatMessageDto, b: ChatMessageDto) => new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime(),
+  );
+}
+
+/**
+ * 首屏加载「最新一页」：假定 GET messages 的 offset 从最早消息算起、返回按时间升序，
+ * 且列表响应带 `X-Total`（见 `performAuthorizedGetList`）。若 total 缺失则退化为 offset=0 的一页。
+ */
+export async function fetchChatMessagesInitialWindow(
+  sync: ContentApiSync,
+  conversationId: string,
+  take: number,
+): Promise<{
+  items: ChatMessageDto[];
+  totalCount: number | null;
+  oldestLoadedOffset: number;
+  hasMoreOlder: boolean;
+}> {
+  const first: { items: ChatMessageDto[]; totalCount: number | null } = await fetchChatMessagesPage(
+    sync,
+    conversationId,
+    0,
+    take,
+  );
+  const total: number | null = first.totalCount;
+  if (total !== null && total > take) {
+    const start: number = Math.max(0, total - take);
+    const latest: { items: ChatMessageDto[]; totalCount: number | null } = await fetchChatMessagesPage(
+      sync,
+      conversationId,
+      start,
+      take,
+    );
+    return {
+      items: latest.items,
+      totalCount: total,
+      oldestLoadedOffset: start,
+      hasMoreOlder: start > 0,
+    };
+  }
+  return {
+    items: first.items,
+    totalCount: total,
+    oldestLoadedOffset: 0,
+    hasMoreOlder: false,
+  };
+}
+
+/** 向更早方向再取一页并前移 `oldestLoadedOffset`。 */
+export async function fetchChatMessagesOlderChunk(
+  sync: ContentApiSync,
+  conversationId: string,
+  oldestLoadedOffset: number,
+  take: number,
+): Promise<{
+  items: ChatMessageDto[];
+  nextOldestOffset: number;
+  hasMoreOlder: boolean;
+}> {
+  if (oldestLoadedOffset <= 0) {
+    return { items: [], nextOldestOffset: 0, hasMoreOlder: false };
+  }
+  const nextOffset: number = Math.max(0, oldestLoadedOffset - take);
+  const page: { items: ChatMessageDto[]; totalCount: number | null } = await fetchChatMessagesPage(
+    sync,
+    conversationId,
+    nextOffset,
+    take,
+  );
+  return {
+    items: page.items,
+    nextOldestOffset: nextOffset,
+    hasMoreOlder: nextOffset > 0,
+  };
 }
 
 export async function postChatMessage(

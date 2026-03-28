@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ReactElement } from 'react';
-import { FlatList, KeyboardAvoidingView, Platform, View } from 'react-native';
+import { ActivityIndicator, FlatList, KeyboardAvoidingView, Platform, View } from 'react-native';
 import { Appbar, Button, IconButton, Text, TextInput, useTheme } from 'react-native-paper';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -10,7 +10,9 @@ import UserAvatar from '@/components/common/UserAvatar';
 import {
   fetchAccountMe,
   fetchChatConversationById,
-  fetchChatMessagesPage,
+  fetchChatMessagesInitialWindow,
+  fetchChatMessagesOlderChunk,
+  mergeChatMessagesById,
   postChatMessage,
   type ChatMessageDto,
   type ConversationListItemDto,
@@ -59,15 +61,12 @@ function formatMessageTime(isoString: string): string {
 
 function MessageBubble({
   message,
-  conversation,
   isSelf,
 }: {
   message: ChatMessageDto;
-  conversation: ConversationListItemDto | null;
   isSelf: boolean;
 }) {
   const theme = useTheme();
-  const avatarUri: string | undefined = isSelf ? undefined : message.senderAvatar || undefined;
 
   const containerBackgroundColor = isSelf ? theme.colors.primaryContainer : theme.colors.surfaceVariant;
   const contentColor = isSelf ? theme.colors.onPrimaryContainer : theme.colors.onSurfaceVariant;
@@ -96,13 +95,13 @@ function MessageBubble({
         </View>
       ) : null}
       <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: CHAT_ROOM_TOKENS.messageRowGap }}>
-        {!isSelf && avatarUri && (
+        {!isSelf ? (
           <UserAvatar
-            uri={avatarUri}
+            uri={message.senderAvatar ?? ''}
             name={message.senderName}
             size={CHAT_ROOM_TOKENS.avatarSize}
           />
-        )}
+        ) : null}
         <View
           style={{
             backgroundColor: containerBackgroundColor,
@@ -175,8 +174,13 @@ export default function ChatScreen(): ReactElement {
   const [isSending, setIsSending] = useState<boolean>(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [draft, setDraft] = useState<string>('');
+  const [oldestLoadedOffset, setOldestLoadedOffset] = useState<number>(0);
+  const [hasMoreOlder, setHasMoreOlder] = useState<boolean>(false);
+  const [isLoadingOlder, setIsLoadingOlder] = useState<boolean>(false);
   const listRef = useRef<FlatList<ChatMessageDto> | null>(null);
   const shouldScrollToLatestRef = useRef<boolean>(false);
+  const loadOlderBusyRef = useRef<boolean>(false);
+  const allowLoadOlderRef = useRef<boolean>(false);
 
   const executeScrollToLatest = useCallback((animated: boolean): void => {
     listRef.current?.scrollToEnd({ animated });
@@ -190,18 +194,24 @@ export default function ChatScreen(): ReactElement {
         setMyAccountId('');
         setIsLoading(false);
         setLoadError(null);
+        allowLoadOlderRef.current = false;
         return;
       }
+      allowLoadOlderRef.current = false;
       setIsLoading(true);
       setLoadError(null);
+      setOldestLoadedOffset(0);
+      setHasMoreOlder(false);
       try {
-        const [conversationResult, messageResult, meResult] = await Promise.all([
+        const [conversationResult, messageWindow, meResult] = await Promise.all([
           fetchChatConversationById(sync, conversationId),
-          fetchChatMessagesPage(sync, conversationId, 0, MESSAGE_PAGE_SIZE),
+          fetchChatMessagesInitialWindow(sync, conversationId, MESSAGE_PAGE_SIZE),
           fetchAccountMe(sync),
         ]);
         setConversation(conversationResult);
-        setMessages(sortMessagesByTime(messageResult.items));
+        setMessages(sortMessagesByTime(messageWindow.items));
+        setOldestLoadedOffset(messageWindow.oldestLoadedOffset);
+        setHasMoreOlder(messageWindow.hasMoreOlder);
         shouldScrollToLatestRef.current = true;
         setMyAccountId(meResult?.id ?? '');
       } catch (error) {
@@ -227,7 +237,7 @@ export default function ChatScreen(): ReactElement {
     try {
       const sent: ChatMessageDto | null = await postChatMessage(sync, conversationId, trimmed);
       if (sent) {
-        setMessages((prev: ChatMessageDto[]) => sortMessagesByTime([...prev, sent]));
+        setMessages((prev: ChatMessageDto[]) => mergeChatMessagesById(prev, [sent]));
         shouldScrollToLatestRef.current = true;
       }
       setDraft('');
@@ -238,6 +248,36 @@ export default function ChatScreen(): ReactElement {
     }
   }, [conversationId, draft, sync]);
 
+  const executeLoadOlderMessages = useCallback(async (): Promise<void> => {
+    if (!allowLoadOlderRef.current) {
+      return;
+    }
+    if (!sync || !conversationId || !hasMoreOlder || isLoadingOlder || loadOlderBusyRef.current) {
+      return;
+    }
+    if (oldestLoadedOffset <= 0) {
+      return;
+    }
+    loadOlderBusyRef.current = true;
+    setIsLoadingOlder(true);
+    try {
+      const chunk = await fetchChatMessagesOlderChunk(
+        sync,
+        conversationId,
+        oldestLoadedOffset,
+        MESSAGE_PAGE_SIZE,
+      );
+      setMessages((prev: ChatMessageDto[]) => mergeChatMessagesById(prev, chunk.items));
+      setOldestLoadedOffset(chunk.nextOldestOffset);
+      setHasMoreOlder(chunk.hasMoreOlder);
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : '加载更早消息失败');
+    } finally {
+      setIsLoadingOlder(false);
+      loadOlderBusyRef.current = false;
+    }
+  }, [sync, conversationId, hasMoreOlder, isLoadingOlder, oldestLoadedOffset]);
+
   function handleChangeDraft(value: string): void {
     if (value.length > INPUT_MAX_LENGTH) return;
     setDraft(value);
@@ -245,7 +285,7 @@ export default function ChatScreen(): ReactElement {
 
   function renderMessage({ item }: { item: ChatMessageDto }): ReactElement {
     const isSelf: boolean = myAccountId.length > 0 ? item.senderId === myAccountId : false;
-    return <MessageBubble message={item} conversation={conversation} isSelf={isSelf} />;
+    return <MessageBubble message={item} isSelf={isSelf} />;
   }
 
   return (
@@ -283,12 +323,30 @@ export default function ChatScreen(): ReactElement {
         }}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
+        maintainVisibleContentPosition={{
+          minIndexForVisible: 0,
+          autoscrollToTopThreshold: 24,
+        }}
+        onStartReached={() => void executeLoadOlderMessages()}
+        onStartReachedThreshold={0.15}
+        ListHeaderComponent={
+          isLoadingOlder ? (
+            <View style={{ paddingVertical: 8, alignItems: 'center' }}>
+              <ActivityIndicator color={theme.colors.primary} />
+            </View>
+          ) : null
+        }
         onContentSizeChange={() => {
           if (!shouldScrollToLatestRef.current) {
             return;
           }
           shouldScrollToLatestRef.current = false;
-          requestAnimationFrame(() => executeScrollToLatest(false));
+          requestAnimationFrame(() => {
+            executeScrollToLatest(false);
+            requestAnimationFrame(() => {
+              allowLoadOlderRef.current = true;
+            });
+          });
         }}
         ListEmptyComponent={
           !isLoading ? (
