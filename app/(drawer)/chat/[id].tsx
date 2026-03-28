@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ReactElement } from 'react';
 import { ActivityIndicator, FlatList, KeyboardAvoidingView, Platform, View } from 'react-native';
-import { Appbar, Button, IconButton, Text, TextInput, useTheme } from 'react-native-paper';
+import { Appbar, Button, IconButton, Snackbar, Text, TextInput, useTheme } from 'react-native-paper';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -11,7 +11,7 @@ import {
   fetchAccountMe,
   fetchChatConversationById,
   fetchChatMessagesInitialWindow,
-  fetchChatMessagesOlderChunk,
+  fetchChatMessagesPage,
   mergeChatMessagesById,
   postChatMessage,
   type ChatMessageDto,
@@ -20,7 +20,9 @@ import {
 import { useContentApiSync } from '@/lib/hooks/use-content-api-sync';
 
 const INPUT_MAX_LENGTH = 800;
-const MESSAGE_PAGE_SIZE = 50;
+/** 首屏与循环分页、仅保留最新条数均使用同一页大小 */
+const MESSAGE_PAGE_SIZE = 20;
+const SNACKBAR_LONG_DURATION_MS = 86400000;
 const CHAT_ROOM_TOKENS = {
   messageRadius: 16,
   messagePaddingHorizontal: 12,
@@ -179,67 +181,160 @@ export default function ChatScreen(): ReactElement {
   const [oldestLoadedOffset, setOldestLoadedOffset] = useState<number>(0);
   const [hasMore, setHasMore] = useState<boolean>(false);
   const [loadingMore, setLoadingMore] = useState<boolean>(false);
-  const [, setPage] = useState<number>(1);
-  const [syncHint, setSyncHint] = useState<string | null>('正在加载最新消息...');
+  const [syncHint, setSyncHint] = useState<string | null>(null);
+  const [loadedCount, setLoadedCount] = useState<number>(0);
+  const [totalCount, setTotalCount] = useState<number>(0);
+  const [round, setRound] = useState<number>(1);
+  const [isPaused, setIsPaused] = useState<boolean>(false);
+  const [showTimeoutSnackbar, setShowTimeoutSnackbar] = useState<boolean>(false);
+
+  const isLoadingRef = useRef<boolean>(false);
+  const isPausedRef = useRef<boolean>(false);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const snackbarShown = useRef<boolean>(false);
   const loadOlderBusyRef = useRef<boolean>(false);
   const allowLoadOlderRef = useRef<boolean>(false);
+  const loopGenerationRef = useRef<number>(0);
 
-  useEffect(() => {
-    if (syncHint === null) {
+  const startLoadingLoop = useCallback(async (): Promise<void> => {
+    if (!sync || !conversationId) {
+      setConversation(null);
+      setMessages([]);
+      setMyAccountId('');
+      setIsLoading(false);
+      setLoadError(null);
+      allowLoadOlderRef.current = false;
+      setSyncHint(null);
+      setLoadedCount(0);
+      setTotalCount(0);
+      setRound(1);
       return;
     }
-    const timerId: ReturnType<typeof setTimeout> = setTimeout(() => {
-      setSyncHint(null);
-    }, 1500);
-    return () => clearTimeout(timerId);
-  }, [syncHint]);
+    if (isLoadingRef.current) {
+      return;
+    }
+    const generation: number = ++loopGenerationRef.current;
+    isLoadingRef.current = true;
+    snackbarShown.current = false;
+    isPausedRef.current = false;
+    setIsPaused(false);
+    setShowTimeoutSnackbar(false);
+    allowLoadOlderRef.current = false;
+    setIsLoading(true);
+    setLoadError(null);
+    setMessages([]);
+    setOldestLoadedOffset(0);
+    setHasMore(false);
+    setLoadedCount(0);
+    setTotalCount(0);
+    setRound(1);
+    setSyncHint('正在加载消息...');
 
-  useEffect(() => {
-    const executeLoadChat = async (): Promise<void> => {
-      if (!sync || !conversationId) {
-        setConversation(null);
-        setMessages([]);
-        setMyAccountId('');
-        setIsLoading(false);
-        setLoadError(null);
-        allowLoadOlderRef.current = false;
-        setSyncHint(null);
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+    }
+    timeoutRef.current = setTimeout(() => {
+      if (isLoadingRef.current && !snackbarShown.current) {
+        snackbarShown.current = true;
+        setShowTimeoutSnackbar(true);
+      }
+    }, 5000);
+
+    try {
+      const [conversationResult, meResult] = await Promise.all([
+        fetchChatConversationById(sync, conversationId),
+        fetchAccountMe(sync),
+      ]);
+      if (generation !== loopGenerationRef.current) {
         return;
       }
-      allowLoadOlderRef.current = false;
-      setIsLoading(true);
-      setLoadError(null);
-      setOldestLoadedOffset(0);
-      setHasMore(false);
-      setPage(1);
-      setSyncHint('正在加载最新消息...');
-      try {
-        const [conversationResult, messageWindow, meResult] = await Promise.all([
-          fetchChatConversationById(sync, conversationId),
-          fetchChatMessagesInitialWindow(sync, conversationId, MESSAGE_PAGE_SIZE),
-          fetchAccountMe(sync),
-        ]);
-        setConversation(conversationResult);
-        setMessages(sortMessagesDescending(messageWindow.items));
-        setOldestLoadedOffset(messageWindow.oldestLoadedOffset);
-        setHasMore(messageWindow.hasMoreOlder);
-        requestAnimationFrame(() => {
-          allowLoadOlderRef.current = true;
-        });
-        setMyAccountId(meResult?.id ?? '');
-        const total: number = messageWindow.totalCount ?? messageWindow.items.length;
-        setSyncHint(`正在加载最新消息 ${messageWindow.items.length}/${total} 第1轮`);
-      } catch (error) {
+      setConversation(conversationResult);
+      setMyAccountId(meResult?.id ?? '');
+
+      const messageWindow = await fetchChatMessagesInitialWindow(sync, conversationId, MESSAGE_PAGE_SIZE);
+      if (generation !== loopGenerationRef.current) {
+        return;
+      }
+      let merged: ChatMessageDto[] = sortMessagesDescending(messageWindow.items);
+      let nextOldestOffset: number = messageWindow.oldestLoadedOffset;
+      let moreOlder: boolean = messageWindow.hasMoreOlder;
+      const total: number = messageWindow.totalCount ?? merged.length;
+      setTotalCount(total);
+      setLoadedCount(merged.length);
+      setMessages(merged);
+      setOldestLoadedOffset(nextOldestOffset);
+      setHasMore(moreOlder);
+      setRound(1);
+      setSyncHint(`正在加载消息 ${merged.length}/${total || '...'} 第1轮`);
+
+      let currentRound: number = 1;
+      while (moreOlder && isLoadingRef.current && generation === loopGenerationRef.current) {
+        while (isPausedRef.current && isLoadingRef.current && generation === loopGenerationRef.current) {
+          await new Promise<void>((resolve) => {
+            setTimeout(resolve, 300);
+          });
+        }
+        if (!isLoadingRef.current || generation !== loopGenerationRef.current) {
+          break;
+        }
+        currentRound += 1;
+        setRound(currentRound);
+        setSyncHint(`正在加载消息 ${merged.length}/${total || '...'} 第${currentRound}轮`);
+
+        const pageOffset: number = Math.max(0, nextOldestOffset - MESSAGE_PAGE_SIZE);
+        const page: { items: ChatMessageDto[]; totalCount: number | null } = await fetchChatMessagesPage(
+          sync,
+          conversationId,
+          pageOffset,
+          MESSAGE_PAGE_SIZE,
+        );
+        if (generation !== loopGenerationRef.current) {
+          break;
+        }
+        merged = sortMessagesDescending(mergeChatMessagesById(merged, page.items));
+        nextOldestOffset = pageOffset;
+        moreOlder = pageOffset > 0;
+        setMessages(merged);
+        setOldestLoadedOffset(nextOldestOffset);
+        setHasMore(moreOlder);
+        setLoadedCount(merged.length);
+        if (page.totalCount !== null) {
+          setTotalCount(page.totalCount);
+        }
+      }
+    } catch (error) {
+      if (generation === loopGenerationRef.current) {
         setLoadError(error instanceof Error ? error.message : '加载聊天失败');
         setConversation(null);
         setMessages([]);
-        setSyncHint(null);
-      } finally {
+      }
+    } finally {
+      if (generation === loopGenerationRef.current) {
+        if (timeoutRef.current) {
+          clearTimeout(timeoutRef.current);
+          timeoutRef.current = null;
+        }
+        isLoadingRef.current = false;
         setIsLoading(false);
+        setSyncHint(null);
+        requestAnimationFrame(() => {
+          allowLoadOlderRef.current = true;
+        });
+      }
+    }
+  }, [conversationId, sync]);
+
+  useEffect(() => {
+    void startLoadingLoop();
+    return () => {
+      loopGenerationRef.current += 1;
+      isLoadingRef.current = false;
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
       }
     };
-    void executeLoadChat();
-  }, [conversationId, sync]);
+  }, [startLoadingLoop]);
 
   const executeSendMessage = useCallback(async (): Promise<void> => {
     if (!sync) {
@@ -276,16 +371,23 @@ export default function ChatScreen(): ReactElement {
     loadOlderBusyRef.current = true;
     setLoadingMore(true);
     try {
-      const chunk = await fetchChatMessagesOlderChunk(
+      const pageOffset: number = Math.max(0, oldestLoadedOffset - MESSAGE_PAGE_SIZE);
+      const page: { items: ChatMessageDto[]; totalCount: number | null } = await fetchChatMessagesPage(
         sync,
         conversationId,
-        oldestLoadedOffset,
+        pageOffset,
         MESSAGE_PAGE_SIZE,
       );
-      setMessages((prev: ChatMessageDto[]) => sortMessagesDescending(mergeChatMessagesById(prev, chunk.items)));
-      setOldestLoadedOffset(chunk.nextOldestOffset);
-      setHasMore(chunk.hasMoreOlder);
-      setPage((p: number) => p + 1);
+      setMessages((prev: ChatMessageDto[]) => {
+        const next: ChatMessageDto[] = sortMessagesDescending(mergeChatMessagesById(prev, page.items));
+        setLoadedCount(next.length);
+        return next;
+      });
+      setOldestLoadedOffset(pageOffset);
+      setHasMore(pageOffset > 0);
+      if (page.totalCount !== null) {
+        setTotalCount(page.totalCount);
+      }
     } catch (error) {
       setLoadError(error instanceof Error ? error.message : '加载更早消息失败');
     } finally {
@@ -330,12 +432,43 @@ export default function ChatScreen(): ReactElement {
       {syncHint ? (
         <View
           style={{
+            flexDirection: 'row',
+            alignItems: 'center',
             backgroundColor: theme.colors.inverseSurface,
             paddingHorizontal: 16,
             paddingVertical: 8,
+            gap: 8,
           }}
         >
-          <Text style={{ color: theme.colors.inverseOnSurface, fontSize: 13 }}>{syncHint}</Text>
+          <Text
+            style={{
+              flex: 1,
+              color: theme.colors.inverseOnSurface,
+              fontSize: 13,
+            }}
+          >
+            {syncHint}
+          </Text>
+          <IconButton
+            icon={isPaused ? 'play' : 'pause'}
+            iconColor={theme.colors.inverseOnSurface}
+            size={18}
+            style={{ margin: 0 }}
+            onPress={() => {
+              const nextPaused: boolean = !isPausedRef.current;
+              isPausedRef.current = nextPaused;
+              setIsPaused(nextPaused);
+              setSyncHint((prev: string | null) => {
+                if (!prev) {
+                  return prev;
+                }
+                if (nextPaused) {
+                  return prev.replace(/^正在加载/, '已暂停 ');
+                }
+                return prev.replace(/^已暂停 /, '正在加载');
+              });
+            }}
+          />
         </View>
       ) : null}
 
@@ -442,6 +575,40 @@ export default function ChatScreen(): ReactElement {
           </View>
         </View>
       </KeyboardAvoidingView>
+
+      <Snackbar
+        visible={showTimeoutSnackbar}
+        onDismiss={() => setShowTimeoutSnackbar(false)}
+        duration={SNACKBAR_LONG_DURATION_MS}
+        action={{
+          label: '只加载最新',
+          onPress: () => {
+            loopGenerationRef.current += 1;
+            isLoadingRef.current = false;
+            isPausedRef.current = false;
+            setIsPaused(false);
+            setIsLoading(false);
+            setSyncHint(null);
+            setShowTimeoutSnackbar(false);
+            if (timeoutRef.current) {
+              clearTimeout(timeoutRef.current);
+              timeoutRef.current = null;
+            }
+            setMessages((prev: ChatMessageDto[]) => {
+              const sliced: ChatMessageDto[] = prev.slice(0, MESSAGE_PAGE_SIZE);
+              setLoadedCount(sliced.length);
+              return sliced;
+            });
+            setOldestLoadedOffset(0);
+            setHasMore(false);
+            requestAnimationFrame(() => {
+              allowLoadOlderRef.current = true;
+            });
+          },
+        }}
+      >
+        加载时间过长，是否只显示最新消息？
+      </Snackbar>
     </View>
   );
 }
