@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import {
   ActivityIndicator,
+  Appbar,
   Button,
   IconButton,
   ProgressBar,
@@ -24,7 +25,6 @@ import { AttachmentPreview } from '@/components/common/AttachmentPreview';
 import UserAvatar from '@/components/common/UserAvatar';
 import { uploadFile, type DriveFile } from '@/lib/drive';
 
-const CONTENT_TITLE_LENGTH: number = 20;
 const MAX_WIDTH: number = 560;
 const AVATAR_SIZE: number = 40;
 
@@ -44,17 +44,6 @@ type AttachmentSlot = AttachmentSlotUploading | AttachmentSlotDone;
 
 function createLocalId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
-}
-
-function buildHeaderTitle(content: string): string {
-  const trimmed: string = content.trim();
-  if (trimmed.length === 0) {
-    return '发帖';
-  }
-  if (trimmed.length <= CONTENT_TITLE_LENGTH) {
-    return trimmed;
-  }
-  return `${trimmed.slice(0, CONTENT_TITLE_LENGTH)}...`;
 }
 
 function computeAggregateUploadProgress(slots: AttachmentSlot[]): number {
@@ -78,7 +67,7 @@ export default function ComposeScreen(): React.JSX.Element {
   const [attachments, setAttachments] = useState<AttachmentSlot[]>([]);
   const [snackbarVisible, setSnackbarVisible] = useState<boolean>(false);
   const [snackbarMessage, setSnackbarMessage] = useState<string>('');
-  const headerTitle: string = useMemo(() => buildHeaderTitle(content), [content]);
+  const dynamicTitle = title.trim().length === 0 ? '发布帖子' : title.trim();
   const showUploadProgress: boolean = useMemo(
     () => attachments.some((s) => s.status === 'uploading'),
     [attachments],
@@ -196,16 +185,11 @@ export default function ComposeScreen(): React.JSX.Element {
             onPress={() => router.back()}
             accessibilityLabel="返回"
           />
-          <View style={{ flex: 1, marginHorizontal: 4, minWidth: 0 }}>
-            <Text
-              variant="headlineSmall"
-              style={{ fontWeight: '600', letterSpacing: -0.5 }}
-              numberOfLines={1}
-              ellipsizeMode="tail"
-            >
-              {headerTitle}
-            </Text>
-          </View>
+          <Appbar.Content
+            title={dynamicTitle}
+            style={{ flex: 1, marginHorizontal: 4, minWidth: 0 }}
+            titleStyle={{ fontWeight: '600', letterSpacing: -0.5 }}
+          />
           <IconButton
             icon="cog"
             onPress={() => Alert.alert('提示', '设置功能开发中')}
