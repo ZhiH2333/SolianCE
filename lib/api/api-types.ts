@@ -11,7 +11,8 @@ export interface AuthChallenge {
 }
 
 export interface AuthFactor {
-  id: number;
+  /** Padlock 因子主键：服务端可能返回整型或 UUID 字符串 */
+  id: number | string;
   type: number;
   name?: string;
 }

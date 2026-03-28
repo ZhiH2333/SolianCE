@@ -1,8 +1,8 @@
-import { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { PropsWithChildren } from 'react';
-import type { TokenPair } from '@/lib/api/types';
+import type { TokenPair } from '@/lib/api/api-types';
+import { refreshAccessToken } from '@/lib/api/http-client';
 import { clearStoredTokenPair, getStoredTokenPair, setStoredTokenPair } from '@/lib/api/token-store';
-import { refreshAccessToken } from '@/lib/api/client';
 
 interface AuthContextValue {
   tokenPair: TokenPair | null;
@@ -15,12 +15,22 @@ interface AuthContextValue {
 
 const AuthContext: React.Context<AuthContextValue | null> = createContext<AuthContextValue | null>(null);
 
+const TOKEN_REFRESH_SKEW_MS: number = 30_000;
+
 function isTokenExpired(expiresAt: string | null): boolean {
   if (!expiresAt) {
     return false;
   }
   const expireMs: number = new Date(expiresAt).getTime();
   return Number.isFinite(expireMs) && expireMs <= Date.now();
+}
+
+function isTokenAboutToExpire(expiresAt: string | null, skewMs: number): boolean {
+  if (!expiresAt) {
+    return false;
+  }
+  const expireMs: number = new Date(expiresAt).getTime();
+  return Number.isFinite(expireMs) && expireMs - skewMs <= Date.now();
 }
 
 export function AuthProvider({ children }: PropsWithChildren): React.JSX.Element {
@@ -50,20 +60,66 @@ export function AuthProvider({ children }: PropsWithChildren): React.JSX.Element
         setIsHydrating(false);
       }
     }
-    hydrateAuthState();
+    void hydrateAuthState();
   }, []);
 
-  async function executeSignIn(pair: TokenPair): Promise<void> {
+  useEffect(() => {
+    if (!tokenPair) {
+      return;
+    }
+
+    let isMounted: boolean = true;
+    let isRefreshing: boolean = false;
+
+    const intervalId: ReturnType<typeof setInterval> = setInterval(() => {
+      void (async (): Promise<void> => {
+        if (!isMounted || isRefreshing) {
+          return;
+        }
+        const stored: TokenPair | null = await getStoredTokenPair();
+        if (!stored) {
+          return;
+        }
+        if (!isTokenAboutToExpire(stored.expiresAt, TOKEN_REFRESH_SKEW_MS)) {
+          return;
+        }
+        isRefreshing = true;
+        try {
+          const refreshedPair: TokenPair = await refreshAccessToken(stored);
+          await setStoredTokenPair(refreshedPair);
+          if (!isMounted) {
+            return;
+          }
+          setTokenPair(refreshedPair);
+        } catch {
+          if (!isMounted) {
+            return;
+          }
+          await clearStoredTokenPair();
+          setTokenPair(null);
+        } finally {
+          isRefreshing = false;
+        }
+      })();
+    }, 10_000);
+
+    return () => {
+      isMounted = false;
+      clearInterval(intervalId);
+    };
+  }, [tokenPair]);
+
+  const executeSignIn = useCallback(async (pair: TokenPair): Promise<void> => {
     await setStoredTokenPair(pair);
     setTokenPair(pair);
-  }
+  }, []);
 
-  async function executeSignOut(): Promise<void> {
+  const executeSignOut = useCallback(async (): Promise<void> => {
     await clearStoredTokenPair();
     setTokenPair(null);
-  }
+  }, []);
 
-  async function executeEnsureFreshToken(): Promise<TokenPair | null> {
+  const executeEnsureFreshToken = useCallback(async (): Promise<TokenPair | null> => {
     if (!tokenPair) {
       return null;
     }
@@ -76,10 +132,11 @@ export function AuthProvider({ children }: PropsWithChildren): React.JSX.Element
       setTokenPair(refreshedPair);
       return refreshedPair;
     } catch {
-      await executeSignOut();
+      await clearStoredTokenPair();
+      setTokenPair(null);
       return null;
     }
-  }
+  }, [tokenPair]);
 
   const value: AuthContextValue = useMemo(
     () => ({
@@ -90,7 +147,7 @@ export function AuthProvider({ children }: PropsWithChildren): React.JSX.Element
       executeSignOut,
       executeEnsureFreshToken,
     }),
-    [tokenPair, isHydrating],
+    [tokenPair, isHydrating, executeSignIn, executeSignOut, executeEnsureFreshToken],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

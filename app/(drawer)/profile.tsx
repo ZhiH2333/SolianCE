@@ -1,3 +1,4 @@
+import { useCallback, useEffect, useState } from 'react';
 import { Alert, ScrollView, View } from 'react-native';
 import { DrawerActions } from '@react-navigation/native';
 import { useNavigation } from '@react-navigation/native';
@@ -5,10 +6,10 @@ import { Appbar, Card, Divider, List, Text, TouchableRipple, useTheme } from 're
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import UserAvatar from '@/components/common/UserAvatar';
-import { MOCK_USER } from '@/lib/mock/data';
 import { useAuthContext } from '@/lib/auth/auth-context';
-
-const MOCK_IS_ONLINE = true;
+import type { AccountMeDto } from '@/lib/api/content-api';
+import { fetchAccountMe } from '@/lib/api/content-api';
+import { useContentApiSync } from '@/lib/hooks/use-content-api-sync';
 
 interface NavItem {
   icon: string;
@@ -67,7 +68,7 @@ const NAV_ITEMS: NavItem[] = [
     onPress: () => Alert.alert('操作记录', '功能开发中'),
   },
   {
-    icon: 'manage-accounts',
+    icon: 'account-multiple-outline',
     title: '账户设置',
     subtitle: '修改账户信息与隐私偏好',
     onPress: () => Alert.alert('账户设置', '功能开发中'),
@@ -98,7 +99,7 @@ function StatusDot({ isOnline }: StatusDotProps) {
 }
 
 interface ProfileCardProps {
-  user: typeof MOCK_USER;
+  user: AccountMeDto | null;
   isOnline: boolean;
 }
 
@@ -125,7 +126,7 @@ function ProfileCard({ user, isOnline }: ProfileCardProps) {
             marginBottom: 12,
           }}
         >
-          <UserAvatar uri={user.avatar} name={user.name} size={56} />
+          <UserAvatar uri={user?.avatar ?? ''} name={user?.name ?? ''} size={56} />
           <StatusDot isOnline={isOnline} />
         </View>
 
@@ -134,22 +135,22 @@ function ProfileCard({ user, isOnline }: ProfileCardProps) {
             variant="headlineSmall"
             style={{ color: theme.colors.onSurface, fontWeight: '700' }}
           >
-            {user.name}
+            {user?.name ?? '加载中…'}
           </Text>
           <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
-            {user.handle}
+            {user?.handle ?? ''}
           </Text>
         </View>
 
         <Text
           variant="bodyMedium"
           style={{
-            color: user.bio ? theme.colors.onSurface : theme.colors.onSurfaceVariant,
-            fontStyle: user.bio ? 'normal' : 'italic',
+            color: user?.bio ? theme.colors.onSurface : theme.colors.onSurfaceVariant,
+            fontStyle: user?.bio ? 'normal' : 'italic',
             marginTop: 4,
           }}
         >
-          {user.bio || '暂无描述'}
+          {user?.bio && user.bio.length > 0 ? user.bio : '暂无描述'}
         </Text>
       </Card.Content>
     </Card>
@@ -251,6 +252,25 @@ export default function ProfileScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
+  const sync = useContentApiSync();
+  const [account, setAccount] = useState<AccountMeDto | null>(null);
+
+  const loadAccount = useCallback(async (): Promise<void> => {
+    if (!sync) {
+      setAccount(null);
+      return;
+    }
+    try {
+      const me = await fetchAccountMe(sync);
+      setAccount(me);
+    } catch {
+      setAccount(null);
+    }
+  }, [sync]);
+
+  useEffect(() => {
+    void loadAccount();
+  }, [loadAccount]);
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
@@ -279,7 +299,7 @@ export default function ProfileScreen() {
         contentContainerStyle={{ paddingBottom: insets.bottom + 80 }}
         showsVerticalScrollIndicator={false}
       >
-        <ProfileCard user={MOCK_USER} isOnline={MOCK_IS_ONLINE} />
+        <ProfileCard user={account} isOnline={false} />
 
         <View style={{ marginTop: 8 }}>
           {NAV_ITEMS.map((item, index) => (

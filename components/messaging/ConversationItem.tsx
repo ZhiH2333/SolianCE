@@ -3,12 +3,24 @@ import { Badge, Text, TouchableRipple, useTheme } from 'react-native-paper';
 import { format, isThisYear, isToday } from 'date-fns';
 import UserAvatar from '@/components/common/UserAvatar';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import type { MockConversation } from '@/lib/mock/data';
+import type { ConversationListItemDto } from '@/lib/api/content-api';
 
 interface ConversationItemProps {
-  conversation: MockConversation;
+  conversation: ConversationListItemDto;
   onPress: () => void;
 }
+const ITEM_TOKENS = {
+  avatarSize: 48,
+  avatarRadius: 24,
+  horizontalPadding: 14,
+  verticalPadding: 9,
+  rowGap: 12,
+  titleTimeGap: 8,
+  metaGap: 5,
+  senderTagRadius: 5,
+  senderTagHorizontal: 6,
+  senderTagVertical: 1,
+} as const;
 
 function formatTimestamp(isoString: string): string {
   const date = new Date(isoString);
@@ -17,20 +29,20 @@ function formatTimestamp(isoString: string): string {
   return format(date, 'yy/MM/dd');
 }
 
-function ConversationAvatar({ conversation }: { conversation: MockConversation }) {
+function ConversationAvatar({ conversation }: { conversation: ConversationListItemDto }) {
   const theme = useTheme();
   if (!conversation.isGroup) {
-    return <UserAvatar uri={conversation.avatar} name={conversation.name} size={44} />;
+    return <UserAvatar uri={conversation.avatar} name={conversation.name} size={ITEM_TOKENS.avatarSize} />;
   }
   if (conversation.avatar) {
-    return <UserAvatar uri={conversation.avatar} name={conversation.name} size={44} />;
+    return <UserAvatar uri={conversation.avatar} name={conversation.name} size={ITEM_TOKENS.avatarSize} />;
   }
   return (
     <View
       style={{
-        width: 44,
-        height: 44,
-        borderRadius: 22,
+        width: ITEM_TOKENS.avatarSize,
+        height: ITEM_TOKENS.avatarSize,
+        borderRadius: ITEM_TOKENS.avatarRadius,
         backgroundColor: theme.colors.surfaceVariant,
         alignItems: 'center',
         justifyContent: 'center',
@@ -56,15 +68,16 @@ export default function ConversationItem({ conversation, onPress }: Conversation
         style={{
           flexDirection: 'row',
           alignItems: 'center',
-          paddingHorizontal: 16,
-          paddingVertical: 10,
-          gap: 14,
+          paddingHorizontal: ITEM_TOKENS.horizontalPadding,
+          paddingVertical: ITEM_TOKENS.verticalPadding,
+          gap: ITEM_TOKENS.rowGap,
+          minHeight: 76,
         }}
       >
         <ConversationAvatar conversation={conversation} />
 
-        <View style={{ flex: 1, gap: 3 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        <View style={{ flex: 1, gap: ITEM_TOKENS.metaGap }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: ITEM_TOKENS.titleTimeGap }}>
             <Text
               variant="titleSmall"
               numberOfLines={1}
@@ -75,6 +88,16 @@ export default function ConversationItem({ conversation, onPress }: Conversation
               }}
             >
               {conversation.name}
+            </Text>
+            <Text
+              variant="bodySmall"
+              style={{
+                color: theme.colors.outline,
+                fontSize: 12,
+                fontVariant: ['tabular-nums'],
+              }}
+            >
+              {timestamp}
             </Text>
             {hasUnread && (
               <Badge style={{ backgroundColor: theme.colors.primary }}>
@@ -87,9 +110,9 @@ export default function ConversationItem({ conversation, onPress }: Conversation
             <View
               style={{
                 backgroundColor: theme.colors.primary,
-                borderRadius: 4,
-                paddingHorizontal: 6,
-                paddingVertical: 1,
+                borderRadius: ITEM_TOKENS.senderTagRadius,
+                paddingHorizontal: ITEM_TOKENS.senderTagHorizontal,
+                paddingVertical: ITEM_TOKENS.senderTagVertical,
               }}
             >
               <Text
@@ -113,17 +136,6 @@ export default function ConversationItem({ conversation, onPress }: Conversation
               {conversation.isEncrypted
                 ? '消息已加密，无法预览'
                 : conversation.lastMessage}
-            </Text>
-
-            <Text
-              variant="bodySmall"
-              style={{
-                color: theme.colors.outline,
-                fontSize: 12,
-                fontVariant: ['tabular-nums'],
-              }}
-            >
-              {timestamp}
             </Text>
           </View>
         </View>

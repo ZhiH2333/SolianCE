@@ -1,15 +1,60 @@
-import { useState } from 'react';
-import { Alert, FlatList, View } from 'react-native';
-import { DrawerActions } from '@react-navigation/native';
-import { useNavigation } from '@react-navigation/native';
-import { Appbar, Divider, FAB, useTheme } from 'react-native-paper';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import {
+  fetchChatConversationsPage,
+  type ConversationListItemDto,
+} from "@/lib/api/content-api";
+import { useContentApiSync } from "@/lib/hooks/use-content-api-sync";
+import { DrawerActions, useNavigation } from "@react-navigation/native";
+import { useRouter } from "expo-router";
+import { useCallback, useEffect, useState } from "react";
+import { Alert, FlatList, View } from "react-native";
+import { Appbar, Divider, FAB, Text, useTheme } from "react-native-paper";
 
-const BOTTOM_NAV_HEIGHT = 80;
-import ConversationItem from '@/components/messaging/ConversationItem';
-import { MOCK_CONVERSATIONS, type MockConversation } from '@/lib/mock/data';
+import ConversationItem from "@/components/messaging/ConversationItem";
+const PAGE_SIZE = 20;
+const CHAT_LAYOUT_TOKENS = {
+  headerHeight: 56,
+  filterRowHeight: 52,
+  listTopPadding: 4,
+  listBottomSpacer: 96,
+  emptyHorizontalPadding: 16,
+  emptyVerticalPadding: 24,
+  fabEdgeInset: 8,
+  fabMarginBottom: 4,
+} as const;
+type ConversationFilter = "all" | "private" | "group";
+function FilterAction({
+  active,
+  icon,
+  onPress,
+}: {
+  active: boolean;
+  icon: string;
+  onPress: () => void;
+}) {
+  return (
+    <View
+      style={{
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
+      <Appbar.Action
+        icon={icon}
+        size={22}
+        onPress={onPress}
+        style={{
+          margin: 0,
+          backgroundColor: active ? "#00000012" : "transparent",
+        }}
+      />
+    </View>
+  );
+}
 
-function extractConvKey(item: MockConversation): string {
+function extractConvKey(item: ConversationListItemDto): string {
   return item.id;
 }
 
@@ -18,20 +63,76 @@ function ItemSeparator() {
 }
 
 function ListFooter() {
-  return <View style={{ height: 88 }} />;
+  return <View style={{ height: CHAT_LAYOUT_TOKENS.listBottomSpacer }} />;
 }
 
 export default function MessagingScreen() {
   const theme = useTheme();
-  const insets = useSafeAreaInsets();
   const navigation = useNavigation();
+  const router = useRouter();
+  const sync = useContentApiSync();
   const [isFabOpen, setIsFabOpen] = useState(false);
+  const [items, setItems] = useState<ConversationListItemDto[]>([]);
+  const [offset, setOffset] = useState(0);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [activeFilter, setActiveFilter] = useState<ConversationFilter>("all");
 
-  function handleConversationPress(conv: MockConversation) {
-    Alert.alert(conv.name, '聊天功能开发中');
+  const loadPage = useCallback(
+    async (fromOffset: number, append: boolean): Promise<void> => {
+      if (!sync) {
+        setItems([]);
+        setOffset(0);
+        setHasMore(false);
+        setLoadError(null);
+        setIsLoading(false);
+        setIsLoadingMore(false);
+        return;
+      }
+      if (append) {
+        setIsLoadingMore(true);
+      } else {
+        setIsLoading(true);
+      }
+      setLoadError(null);
+      try {
+        const result = await fetchChatConversationsPage(
+          sync,
+          fromOffset,
+          PAGE_SIZE,
+        );
+        if (append) {
+          setItems((prev) => [...prev, ...result.items]);
+        } else {
+          setItems(result.items);
+        }
+        setOffset(fromOffset + result.items.length);
+        setHasMore(result.items.length >= PAGE_SIZE);
+      } catch (error) {
+        setLoadError(error instanceof Error ? error.message : "加载聊天失败");
+        if (!append) {
+          setItems([]);
+        }
+        setHasMore(false);
+      } finally {
+        setIsLoading(false);
+        setIsLoadingMore(false);
+      }
+    },
+    [sync],
+  );
+
+  useEffect(() => {
+    void loadPage(0, false);
+  }, [loadPage]);
+
+  function handleConversationPress(conv: ConversationListItemDto) {
+    router.push(`/chat/${conv.id}` as any);
   }
 
-  function renderConversationItem({ item }: { item: MockConversation }) {
+  function renderConversationItem({ item }: { item: ConversationListItemDto }) {
     return (
       <ConversationItem
         conversation={item}
@@ -39,67 +140,140 @@ export default function MessagingScreen() {
       />
     );
   }
+  const filteredItems: ConversationListItemDto[] = items.filter(
+    (item: ConversationListItemDto) => {
+      if (activeFilter === "all") {
+        return true;
+      }
+      if (activeFilter === "group") {
+        return item.isGroup;
+      }
+      return !item.isGroup;
+    },
+  );
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
-      <Appbar.Header style={{ backgroundColor: theme.colors.surface }} elevated>
+      <Appbar.Header
+        style={{
+          backgroundColor: theme.colors.surface,
+          height: CHAT_LAYOUT_TOKENS.headerHeight,
+        }}
+        elevated
+      >
         <Appbar.Action
           icon="menu"
           iconColor={theme.colors.onSurface}
           onPress={() => navigation.dispatch(DrawerActions.openDrawer())}
         />
         <Appbar.Content
-          title="聊天"
+          title="Chat"
           titleStyle={{
             color: theme.colors.onSurface,
-            fontWeight: '600',
-            textAlign: 'center',
+            fontWeight: "600",
+            textAlign: "center",
           }}
         />
         <Appbar.Action
-          icon="menu"
-          iconColor="transparent"
-          onPress={() => {}}
+          icon="email-outline"
+          iconColor={theme.colors.onSurface}
+          onPress={() => Alert.alert("邀请", "功能开发中")}
         />
       </Appbar.Header>
+      <View
+        style={{
+          height: CHAT_LAYOUT_TOKENS.filterRowHeight,
+          backgroundColor: theme.colors.surface,
+          flexDirection: "row",
+          alignItems: "center",
+          paddingHorizontal: 12,
+          gap: 8,
+        }}
+      >
+        <FilterAction
+          active={activeFilter === "all"}
+          icon={activeFilter === "all" ? "inbox" : "inbox-outline"}
+          onPress={() => setActiveFilter("all")}
+        />
+        <FilterAction
+          active={activeFilter === "private"}
+          icon={activeFilter === "private" ? "account" : "account-outline"}
+          onPress={() => setActiveFilter("private")}
+        />
+        <FilterAction
+          active={activeFilter === "group"}
+          icon={
+            activeFilter === "group" ? "account-group" : "account-group-outline"
+          }
+          onPress={() => setActiveFilter("group")}
+        />
+      </View>
 
       <FlatList
-        data={MOCK_CONVERSATIONS}
+        data={filteredItems}
         renderItem={renderConversationItem}
         keyExtractor={extractConvKey}
         ItemSeparatorComponent={ItemSeparator}
         ListFooterComponent={ListFooter}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingTop: 4 }}
+        contentContainerStyle={{
+          paddingTop: CHAT_LAYOUT_TOKENS.listTopPadding,
+        }}
+        refreshing={isLoading && items.length === 0}
+        onRefresh={() => {
+          setOffset(0);
+          void loadPage(0, false);
+        }}
+        onEndReached={() => {
+          if (isLoading || isLoadingMore || !hasMore) {
+            return;
+          }
+          void loadPage(offset, true);
+        }}
+        onEndReachedThreshold={0.3}
+        ListEmptyComponent={
+          !isLoading ? (
+            <View
+              style={{
+                paddingHorizontal: CHAT_LAYOUT_TOKENS.emptyHorizontalPadding,
+                paddingVertical: CHAT_LAYOUT_TOKENS.emptyVerticalPadding,
+              }}
+            >
+              <Text style={{ color: theme.colors.onSurfaceVariant }}>
+                {loadError ?? "暂无聊天"}
+              </Text>
+            </View>
+          ) : null
+        }
       />
 
       <FAB.Group
         open={isFabOpen}
         visible
-        icon={isFabOpen ? 'close' : 'plus'}
-        style={{
-          bottom: BOTTOM_NAV_HEIGHT + insets.bottom,
-          paddingBottom: 0,
+        icon={isFabOpen ? "close" : "plus"}
+        style={{ bottom: CHAT_LAYOUT_TOKENS.fabEdgeInset }}
+        fabStyle={{
+          backgroundColor: theme.colors.primaryContainer,
+          marginBottom: CHAT_LAYOUT_TOKENS.fabMarginBottom,
         }}
-        fabStyle={{ backgroundColor: theme.colors.primaryContainer, marginBottom: 4 }}
         color={theme.colors.onPrimaryContainer}
         actions={[
           {
-            icon: 'chat-plus-outline',
-            label: '新建频道',
+            icon: "chat-plus-outline",
+            label: "新建频道",
             onPress: () => {
               setIsFabOpen(false);
-              Alert.alert('新建频道', '功能开发中');
+              Alert.alert("新建频道", "功能开发中");
             },
             style: { backgroundColor: theme.colors.secondaryContainer },
             color: theme.colors.onSecondaryContainer,
           },
           {
-            icon: 'message-plus-outline',
-            label: '新建私信',
+            icon: "message-plus-outline",
+            label: "新建私信",
             onPress: () => {
               setIsFabOpen(false);
-              Alert.alert('新建私信', '功能开发中');
+              Alert.alert("新建私信", "功能开发中");
             },
             style: { backgroundColor: theme.colors.secondaryContainer },
             color: theme.colors.onSecondaryContainer,

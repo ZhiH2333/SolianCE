@@ -1,11 +1,14 @@
 import { DrawerContentScrollView } from '@react-navigation/drawer';
 import type { DrawerContentComponentProps } from '@react-navigation/drawer';
 import { usePathname, useRouter } from 'expo-router';
+import { useCallback, useEffect, useState } from 'react';
 import { Alert, View } from 'react-native';
-import { Avatar, Divider, List, Text, TouchableRipple, useTheme } from 'react-native-paper';
+import { Avatar, Divider, Text, TouchableRipple, useTheme } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { MOCK_USER } from '@/lib/mock/data';
+import type { AccountMeDto } from '@/lib/api/content-api';
+import { fetchAccountMe } from '@/lib/api/content-api';
+import { useContentApiSync } from '@/lib/hooks/use-content-api-sync';
 
 interface NavDestination {
   label: string;
@@ -63,31 +66,38 @@ function NavItem({ destination, isActive, onPress }: NavItemProps) {
 
 interface UserHeaderProps {
   onPress: () => void;
+  account: AccountMeDto | null;
 }
 
-function UserHeader({ onPress }: UserHeaderProps) {
+function UserHeader({ onPress, account }: UserHeaderProps) {
   const theme = useTheme();
+  const displayName: string = account?.name ?? '未登录';
+  const displayHandle: string = account?.handle ?? '';
   return (
     <TouchableRipple onPress={onPress} style={{ paddingHorizontal: 24, paddingVertical: 16 }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
-        <Avatar.Image size={48} source={{ uri: MOCK_USER.avatar }} />
+        {account?.avatar && account.avatar.length > 0 ? (
+          <Avatar.Image size={48} source={{ uri: account.avatar }} />
+        ) : (
+          <Avatar.Text size={48} label={(displayName.slice(0, 1) || '?').toUpperCase()} />
+        )}
         <View style={{ flex: 1 }}>
           <Text
             variant="titleMedium"
             numberOfLines={1}
             style={{ color: theme.colors.onSurface, fontWeight: '700' }}
           >
-            {MOCK_USER.name}
+            {displayName}
           </Text>
           <Text
             variant="bodySmall"
             numberOfLines={1}
             style={{ color: theme.colors.onSurfaceVariant, marginTop: 2 }}
           >
-            {MOCK_USER.handle}
+            {displayHandle}
           </Text>
         </View>
-        {MOCK_USER.verified && (
+        {account?.verified === true && (
           <MaterialCommunityIcons
             name="check-decagram"
             size={18}
@@ -104,6 +114,25 @@ export default function AppDrawer(props: DrawerContentComponentProps) {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const pathname = usePathname();
+  const sync = useContentApiSync();
+  const [account, setAccount] = useState<AccountMeDto | null>(null);
+
+  const loadAccount = useCallback(async (): Promise<void> => {
+    if (!sync) {
+      setAccount(null);
+      return;
+    }
+    try {
+      const me = await fetchAccountMe(sync);
+      setAccount(me);
+    } catch {
+      setAccount(null);
+    }
+  }, [sync]);
+
+  useEffect(() => {
+    void loadAccount();
+  }, [loadAccount]);
 
   function getIsActive(path: string): boolean {
     if (path === '/(drawer)/(tabs)/') {
@@ -133,7 +162,7 @@ export default function AppDrawer(props: DrawerContentComponentProps) {
         contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: 0, flexGrow: 1 }}
         scrollEnabled={false}
       >
-        <UserHeader onPress={handleProfilePress} />
+        <UserHeader onPress={handleProfilePress} account={account} />
 
         <Divider style={{ marginHorizontal: 16, marginVertical: 8 }} />
 

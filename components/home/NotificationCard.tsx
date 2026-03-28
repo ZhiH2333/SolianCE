@@ -1,10 +1,32 @@
-import { View } from 'react-native';
-import { Card, IconButton, Text, useTheme } from 'react-native-paper';
-
-const MOCK_UNREAD_COUNT = 0;
+import { fetchNotificationUnreadCount } from "@/lib/api/content-api";
+import { useContentApiSync } from "@/lib/hooks/use-content-api-sync";
+import { useRouter } from "expo-router";
+import { useCallback, useEffect, useState } from "react";
+import { View } from "react-native";
+import { Card, IconButton, Text, useTheme } from "react-native-paper";
 
 export default function NotificationCard() {
   const theme = useTheme();
+  const router = useRouter();
+  const sync = useContentApiSync();
+  const [unreadCount, setUnreadCount] = useState<number>(0);
+
+  const refresh = useCallback(async (): Promise<void> => {
+    if (!sync) {
+      setUnreadCount(0);
+      return;
+    }
+    try {
+      const n: number = await fetchNotificationUnreadCount(sync);
+      setUnreadCount(n);
+    } catch {
+      setUnreadCount(0);
+    }
+  }, [sync]);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
 
   return (
     <Card
@@ -13,9 +35,12 @@ export default function NotificationCard() {
       style={{ borderRadius: 12, backgroundColor: theme.colors.surface }}
     >
       <Card.Content style={{ padding: 20 }}>
-        <View style={{ minHeight: 120, justifyContent: 'space-between' }}>
+        <View style={{ minHeight: 120, justifyContent: "space-between" }}>
           <View>
-            <Text variant="titleMedium" style={{ color: theme.colors.onSurface }}>
+            <Text
+              variant="titleMedium"
+              style={{ color: theme.colors.onSurface }}
+            >
               通知
             </Text>
             <Text
@@ -25,13 +50,11 @@ export default function NotificationCard() {
                 marginTop: 4,
               }}
             >
-              {MOCK_UNREAD_COUNT > 0
-                ? `${MOCK_UNREAD_COUNT} 条未读`
-                : '无未读通知'}
+              {unreadCount > 0 ? `${unreadCount} 条未读` : "无未读通知"}
             </Text>
           </View>
 
-          <View style={{ alignItems: 'flex-end', marginTop: 16 }}>
+          <View style={{ alignItems: "flex-end", marginTop: 16 }}>
             <View
               style={{
                 borderRadius: 999,
@@ -42,7 +65,7 @@ export default function NotificationCard() {
                 icon="arrow-right"
                 size={22}
                 iconColor={theme.colors.onSurfaceVariant}
-                onPress={() => {}}
+                onPress={() => router.push("/notifications" as any)}
               />
             </View>
           </View>
