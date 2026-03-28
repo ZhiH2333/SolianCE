@@ -1,6 +1,6 @@
 import { Platform } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
-import type { TokenPair } from '@/lib/api/types';
+import type { TokenPair } from '@/lib/api/api-types';
 
 const TOKEN_STORE_KEY: string = 'dyn_user_tk';
 

@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { PropsWithChildren } from 'react';
-import type { TokenPair } from '@/lib/api/types';
+import type { TokenPair } from '@/lib/api/api-types';
 import { refreshAccessToken } from '@/lib/api/http-client';
 import { clearStoredTokenPair, getStoredTokenPair, setStoredTokenPair } from '@/lib/api/token-store';
 

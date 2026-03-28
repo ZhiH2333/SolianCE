@@ -1,15 +1,15 @@
-import { useCallback, useEffect, useState } from 'react';
-import { FlatList, Pressable, View } from 'react-native';
-import { useRouter } from 'expo-router';
-import { Appbar, Divider, Text, useTheme } from 'react-native-paper';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
-  fetchNotificationsPage,
-  markAllNotificationsRead,
-  markNotificationRead,
-  type NotificationItemDto,
-} from '@/lib/api/content-api';
-import { useContentApiSync } from '@/lib/hooks/use-content-api-sync';
+    fetchNotificationsPage,
+    markAllNotificationsRead,
+    markNotificationRead,
+    type NotificationItemDto,
+} from "@/lib/api/content-api";
+import { useContentApiSync } from "@/lib/hooks/use-content-api-sync";
+import { useRouter } from "expo-router";
+import { useCallback, useEffect, useState } from "react";
+import { FlatList, Pressable, View } from "react-native";
+import { Appbar, Divider, Text, useTheme } from "react-native-paper";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const PAGE_SIZE: number = 20;
 
@@ -31,10 +31,18 @@ function NotificationRow({
       style={{
         paddingHorizontal: 16,
         paddingVertical: 14,
-        backgroundColor: item.isRead ? theme.colors.background : theme.colors.secondaryContainer + '33',
+        backgroundColor: item.isRead
+          ? theme.colors.background
+          : theme.colors.secondaryContainer + "33",
       }}
     >
-      <Text variant="titleSmall" style={{ color: theme.colors.onSurface, fontWeight: item.isRead ? '500' : '700' }}>
+      <Text
+        variant="titleSmall"
+        style={{
+          color: theme.colors.onSurface,
+          fontWeight: item.isRead ? "500" : "700",
+        }}
+      >
         {item.title}
       </Text>
       {item.body.length > 0 ? (
@@ -46,7 +54,10 @@ function NotificationRow({
           {item.body}
         </Text>
       ) : null}
-      <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant, marginTop: 8 }}>
+      <Text
+        variant="bodySmall"
+        style={{ color: theme.colors.onSurfaceVariant, marginTop: 8 }}
+      >
         {new Date(item.createdAt).toLocaleString()}
       </Text>
     </Pressable>
@@ -83,7 +94,11 @@ export default function NotificationsScreen(): React.JSX.Element {
       }
       setLoadError(null);
       try {
-        const result = await fetchNotificationsPage(sync, fromOffset, PAGE_SIZE);
+        const result = await fetchNotificationsPage(
+          sync,
+          fromOffset,
+          PAGE_SIZE,
+        );
         if (append) {
           setItems((prev) => [...prev, ...result.items]);
         } else {
@@ -92,7 +107,7 @@ export default function NotificationsScreen(): React.JSX.Element {
         setOffset(fromOffset + result.items.length);
         setHasMore(result.items.length >= PAGE_SIZE);
       } catch (error) {
-        setLoadError(error instanceof Error ? error.message : '加载通知失败');
+        setLoadError(error instanceof Error ? error.message : "加载通知失败");
         if (!append) {
           setItems([]);
         }
@@ -139,7 +154,7 @@ export default function NotificationsScreen(): React.JSX.Element {
       await markAllNotificationsRead(sync);
       setItems((prev) => prev.map((n) => ({ ...n, isRead: true })));
     } catch (error) {
-      setLoadError(error instanceof Error ? error.message : '操作失败');
+      setLoadError(error instanceof Error ? error.message : "操作失败");
     }
   }, [sync]);
 
@@ -147,13 +162,24 @@ export default function NotificationsScreen(): React.JSX.Element {
     <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
       <Appbar.Header style={{ backgroundColor: theme.colors.surface }} elevated>
         <Appbar.BackAction onPress={() => router.back()} />
-        <Appbar.Content title="通知" titleStyle={{ color: theme.colors.onSurface, fontWeight: '600' }} />
-        <Appbar.Action icon="check-all" onPress={() => void executeMarkAllRead()} />
+        <Appbar.Content
+          title="通知"
+          titleStyle={{ color: theme.colors.onSurface, fontWeight: "600" }}
+        />
+        <Appbar.Action
+          icon="check-all"
+          onPress={() => void executeMarkAllRead()}
+        />
       </Appbar.Header>
       <FlatList
         data={items}
         keyExtractor={extractNotificationKey}
-        renderItem={({ item }) => <NotificationRow item={item} onPress={(row) => void executePressItem(row)} />}
+        renderItem={({ item }) => (
+          <NotificationRow
+            item={item}
+            onPress={(row) => void executePressItem(row)}
+          />
+        )}
         ItemSeparatorComponent={() => <Divider />}
         refreshing={isLoading && items.length === 0}
         onRefresh={() => {
@@ -170,7 +196,9 @@ export default function NotificationsScreen(): React.JSX.Element {
         ListEmptyComponent={
           !isLoading ? (
             <View style={{ padding: 24 }}>
-              <Text style={{ color: theme.colors.onSurfaceVariant }}>{loadError ?? '暂无通知'}</Text>
+              <Text style={{ color: theme.colors.onSurfaceVariant }}>
+                {loadError ?? "暂无通知"}
+              </Text>
             </View>
           ) : null
         }
