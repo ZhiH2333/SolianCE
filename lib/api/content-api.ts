@@ -845,10 +845,9 @@ export async function fetchAccountMe(sync: ContentApiSync): Promise<AccountMeDto
   const nick: string = pickString(root, ['nick', 'nickname']);
   const name: string = nick.length > 0 ? nick : uname.length > 0 ? uname : '用户';
   const handle: string = uname.length > 0 ? `@${uname}` : '@';
-  let avatar: string = pickString(root, ['avatar']);
-  const pfp = readRecord(root.profile_picture ?? root.profilePicture);
-  if (pfp) {
-    avatar = pickString(pfp, ['public_url', 'publicUrl', 'url']) || avatar;
+  let avatar: string = resolvePortraitFromAccountRecord(root);
+  if (avatar.length > 0 && !avatar.startsWith('http')) {
+    avatar = resolveMediaUrl(avatar);
   }
   const verifiedRaw: unknown = root.verified ?? root.is_verified ?? root.isVerified;
   const verified: boolean = verifiedRaw === true;
