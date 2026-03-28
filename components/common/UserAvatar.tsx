@@ -1,4 +1,5 @@
 import { Avatar } from 'react-native-paper';
+import { Image } from 'react-native';
 
 interface UserAvatarProps {
   uri: string;
@@ -8,7 +9,12 @@ interface UserAvatarProps {
 
 export default function UserAvatar({ uri, name, size = 40 }: UserAvatarProps) {
   if (uri) {
-    return <Avatar.Image size={size} source={{ uri }} />;
+    return (
+      <Image
+        source={{ uri }}
+        style={{ width: size, height: size, borderRadius: size / 2 }}
+      />
+    );
   }
   const initials = name
     .split(' ')

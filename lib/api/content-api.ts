@@ -3,6 +3,7 @@ import {
   performAuthorizedGetAllowNotFound,
   performAuthorizedGetList,
 } from '@/lib/api/http-client';
+import { API_BASE_URL } from '@/lib/api/http-client';
 import type { TokenPair } from '@/lib/api/api-types';
 import {
   mapJsonToFeedComment,
@@ -26,6 +27,16 @@ function pickString(source: Record<string, unknown>, keys: string[]): string {
     }
   }
   return '';
+}
+
+function resolveMediaUrl(raw: string): string {
+  if (raw.startsWith('http://') || raw.startsWith('https://')) {
+    return raw;
+  }
+  if (raw.startsWith('/')) {
+    return `${API_BASE_URL}${raw}`;
+  }
+  return `${API_BASE_URL}/drive/files/${raw}`;
 }
 
 /** 已登录请求所需的 token + 写回上下文（刷新 access token 后同步） */
@@ -154,15 +165,111 @@ function mapJsonToConversationListItem(raw: unknown): ConversationListItemDto | 
     return null;
   }
   const roomName: string = pickString(root, ['name', 'title', 'display_name', 'displayName', 'alias']);
-  const displayName: string = roomName.length > 0 ? roomName : '聊天';
+  const firstMemberForDm: Record<string, unknown> | null = ((): Record<string, unknown> | null => {
+    const membersRaw: unknown = root.members;
+    if (!Array.isArray(membersRaw) || membersRaw.length === 0) {
+      return null;
+    }
+    return readRecord(membersRaw[0]);
+  })();
+  const dmName: string = ((): string => {
+    if (roomName.length > 0) {
+      return roomName;
+    }
+    const firstMember: Record<string, unknown> | null = firstMemberForDm;
+    if (!firstMember) {
+      return '';
+    }
+    const account: Record<string, unknown> | null =
+      readRecord(firstMember.account) ?? readRecord(firstMember.profile) ?? null;
+    return (
+      pickString(firstMember, ['nick', 'name', 'uname', 'username', 'display_name', 'displayName']) ||
+      pickString(account ?? {}, ['nick', 'name', 'uname', 'username', 'display_name', 'displayName']) ||
+      ''
+    );
+  })();
+  const displayName: string = roomName.length > 0 ? roomName : dmName.length > 0 ? dmName : '聊天';
   const avatarRoot: Record<string, unknown> | null =
     readRecord(root.avatar) ??
     readRecord(root.picture) ??
     readRecord(root.profile_picture) ??
     readRecord(root.profilePicture);
+  const avatarUrlValue: unknown = avatarRoot?.url ?? null;
+  const avatarUrlRoot: Record<string, unknown> | null = readRecord(avatarUrlValue);
+  const avatarUrlFromValue: string = ((): string => {
+    if (typeof avatarUrlValue === 'string' && avatarUrlValue.length > 0) {
+      return avatarUrlValue;
+    }
+    const urlRecord: Record<string, unknown> | null = readRecord(avatarUrlValue);
+    if (urlRecord) {
+      return pickString(urlRecord, ['public_url', 'publicUrl', 'url', 'download_url', 'downloadUrl']);
+    }
+    return '';
+  })();
+  const avatarUrlFromMeta: string = ((): string => {
+    const fileMeta: Record<string, unknown> | null = readRecord(avatarRoot?.file_meta ?? null);
+    const userMeta: Record<string, unknown> | null = readRecord(avatarRoot?.user_meta ?? null);
+    return (
+      pickString(fileMeta ?? {}, ['public_url', 'publicUrl', 'url', 'download_url', 'downloadUrl']) ||
+      pickString(userMeta ?? {}, ['public_url', 'publicUrl', 'url', 'download_url', 'downloadUrl']) ||
+      ''
+    );
+  })();
+  const avatarUrlFromId: string = ((): string => {
+    const fileId: string = pickString(avatarRoot ?? {}, ['id', 'hash']);
+    if (fileId.length === 0) {
+      return '';
+    }
+    return resolveMediaUrl(fileId);
+  })();
+  const avatarFromDmMember: string = ((): string => {
+    if (roomName.length > 0) {
+      return '';
+    }
+    const firstMember: Record<string, unknown> | null = firstMemberForDm;
+    if (!firstMember) {
+      return '';
+    }
+    const account: Record<string, unknown> | null =
+      readRecord(firstMember.account) ??
+      readRecord(firstMember.profile) ??
+      null;
+    const accountProfile: Record<string, unknown> | null = readRecord(account?.profile ?? null);
+    const avatarObj: Record<string, unknown> | null =
+      readRecord(account?.avatar) ??
+      readRecord(account?.picture) ??
+      readRecord(account?.profile_picture) ??
+      readRecord(account?.profilePicture) ??
+      readRecord(accountProfile?.avatar) ??
+      readRecord(accountProfile?.picture) ??
+      readRecord(accountProfile?.profile_picture) ??
+      readRecord(accountProfile?.profilePicture) ??
+      null;
+    const direct: string =
+      pickString(account ?? {}, ['avatar', 'picture', 'icon', 'photo']) ||
+      pickString(accountProfile ?? {}, ['avatar', 'picture', 'icon', 'photo']) ||
+      pickString(avatarObj ?? {}, ['public_url', 'publicUrl', 'url', 'download_url', 'downloadUrl']) ||
+      '';
+    if (direct.length > 0) {
+      return resolveMediaUrl(direct);
+    }
+    const fallbackId: string =
+      pickString(avatarObj ?? {}, ['id', 'hash']) ||
+      pickString(account ?? {}, ['avatar_id', 'avatarId', 'picture_id', 'pictureId']) ||
+      pickString(accountProfile ?? {}, ['avatar_id', 'avatarId', 'picture_id', 'pictureId']);
+    if (fallbackId.length === 0) {
+      return '';
+    }
+    return resolveMediaUrl(fallbackId);
+  })();
   const avatar: string =
     pickString(root, ['avatar', 'picture', 'icon', 'photo']) ||
-    pickString(avatarRoot ?? {}, ['public_url', 'publicUrl', 'url']) ||
+    pickString(avatarRoot ?? {}, ['public_url', 'publicUrl', 'url', 'download_url', 'downloadUrl']) ||
+    pickString(avatarUrlRoot ?? {}, ['public_url', 'publicUrl', 'url', 'download_url', 'downloadUrl']) ||
+    avatarUrlFromMeta ||
+    avatarUrlFromValue ||
+    avatarUrlFromId ||
+    avatarFromDmMember ||
     '';
   const latestMessageRoot: Record<string, unknown> | null =
     readRecord(root.last_message) ?? readRecord(root.lastMessage) ?? readRecord(root.latest_message);
@@ -261,21 +368,31 @@ function mapJsonToChatMessage(raw: unknown, conversationId: string): ChatMessage
   }
   const senderRoot: Record<string, unknown> | null =
     readRecord(root.sender) ?? readRecord(root.author) ?? readRecord(root.account);
+  const senderAccountRoot: Record<string, unknown> | null =
+    readRecord(senderRoot?.account) ?? readRecord(senderRoot?.profile) ?? null;
   const senderId: string =
     pickString(root, ['sender_id', 'senderId', 'author_id', 'authorId']) ||
     pickString(senderRoot ?? {}, ['id', 'uid', 'account_id', 'accountId']);
   const senderName: string =
     pickString(root, ['sender_name', 'senderName', 'author_name', 'authorName']) ||
-    pickString(senderRoot ?? {}, ['nick', 'name', 'uname']) ||
+    pickString(senderRoot ?? {}, ['nick', 'name', 'uname', 'username', 'display_name', 'displayName']) ||
+    pickString(senderAccountRoot ?? {}, ['nick', 'name', 'uname', 'username', 'display_name', 'displayName']) ||
     '用户';
   const senderAvatarObj: Record<string, unknown> | null =
     readRecord(senderRoot?.avatar) ??
     readRecord(senderRoot?.profile_picture) ??
     readRecord(senderRoot?.profilePicture) ??
     readRecord(senderRoot?.picture);
+  const senderAvatarObjFromAccount: Record<string, unknown> | null =
+    readRecord(senderAccountRoot?.avatar) ??
+    readRecord(senderAccountRoot?.profile_picture) ??
+    readRecord(senderAccountRoot?.profilePicture) ??
+    readRecord(senderAccountRoot?.picture);
   const senderAvatar: string =
     pickString(senderRoot ?? {}, ['avatar', 'picture', 'icon']) ||
     pickString(senderAvatarObj ?? {}, ['public_url', 'publicUrl', 'url']) ||
+    pickString(senderAccountRoot ?? {}, ['avatar', 'picture', 'icon']) ||
+    pickString(senderAvatarObjFromAccount ?? {}, ['public_url', 'publicUrl', 'url']) ||
     '';
   const content: string =
     pickString(root, ['body', 'content', 'text', 'message']) ||

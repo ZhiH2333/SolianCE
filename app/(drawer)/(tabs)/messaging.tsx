@@ -1,13 +1,15 @@
-import { useCallback, useEffect, useState } from 'react';
-import { Alert, FlatList, View } from 'react-native';
-import { DrawerActions } from '@react-navigation/native';
-import { useNavigation } from '@react-navigation/native';
-import { useRouter } from 'expo-router';
-import { Appbar, Divider, FAB, Text, useTheme } from 'react-native-paper';
-import { fetchChatConversationsPage, type ConversationListItemDto } from '@/lib/api/content-api';
-import { useContentApiSync } from '@/lib/hooks/use-content-api-sync';
+import {
+  fetchChatConversationsPage,
+  type ConversationListItemDto,
+} from "@/lib/api/content-api";
+import { useContentApiSync } from "@/lib/hooks/use-content-api-sync";
+import { DrawerActions, useNavigation } from "@react-navigation/native";
+import { useRouter } from "expo-router";
+import { useCallback, useEffect, useState } from "react";
+import { Alert, FlatList, View } from "react-native";
+import { Appbar, Divider, FAB, Text, useTheme } from "react-native-paper";
 
-import ConversationItem from '@/components/messaging/ConversationItem';
+import ConversationItem from "@/components/messaging/ConversationItem";
 const PAGE_SIZE = 20;
 const CHAT_LAYOUT_TOKENS = {
   headerHeight: 56,
@@ -19,7 +21,7 @@ const CHAT_LAYOUT_TOKENS = {
   fabEdgeInset: 8,
   fabMarginBottom: 4,
 } as const;
-type ConversationFilter = 'all' | 'private' | 'group';
+type ConversationFilter = "all" | "private" | "group";
 function FilterAction({
   active,
   icon,
@@ -35,8 +37,8 @@ function FilterAction({
         width: 36,
         height: 36,
         borderRadius: 18,
-        alignItems: 'center',
-        justifyContent: 'center',
+        alignItems: "center",
+        justifyContent: "center",
       }}
     >
       <Appbar.Action
@@ -45,7 +47,7 @@ function FilterAction({
         onPress={onPress}
         style={{
           margin: 0,
-          backgroundColor: active ? '#00000012' : 'transparent',
+          backgroundColor: active ? "#00000012" : "transparent",
         }}
       />
     </View>
@@ -76,7 +78,7 @@ export default function MessagingScreen() {
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [activeFilter, setActiveFilter] = useState<ConversationFilter>('all');
+  const [activeFilter, setActiveFilter] = useState<ConversationFilter>("all");
 
   const loadPage = useCallback(
     async (fromOffset: number, append: boolean): Promise<void> => {
@@ -96,7 +98,11 @@ export default function MessagingScreen() {
       }
       setLoadError(null);
       try {
-        const result = await fetchChatConversationsPage(sync, fromOffset, PAGE_SIZE);
+        const result = await fetchChatConversationsPage(
+          sync,
+          fromOffset,
+          PAGE_SIZE,
+        );
         if (append) {
           setItems((prev) => [...prev, ...result.items]);
         } else {
@@ -105,7 +111,7 @@ export default function MessagingScreen() {
         setOffset(fromOffset + result.items.length);
         setHasMore(result.items.length >= PAGE_SIZE);
       } catch (error) {
-        setLoadError(error instanceof Error ? error.message : '加载聊天失败');
+        setLoadError(error instanceof Error ? error.message : "加载聊天失败");
         if (!append) {
           setItems([]);
         }
@@ -134,20 +140,25 @@ export default function MessagingScreen() {
       />
     );
   }
-  const filteredItems: ConversationListItemDto[] = items.filter((item: ConversationListItemDto) => {
-    if (activeFilter === 'all') {
-      return true;
-    }
-    if (activeFilter === 'group') {
-      return item.isGroup;
-    }
-    return !item.isGroup;
-  });
+  const filteredItems: ConversationListItemDto[] = items.filter(
+    (item: ConversationListItemDto) => {
+      if (activeFilter === "all") {
+        return true;
+      }
+      if (activeFilter === "group") {
+        return item.isGroup;
+      }
+      return !item.isGroup;
+    },
+  );
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
       <Appbar.Header
-        style={{ backgroundColor: theme.colors.surface, height: CHAT_LAYOUT_TOKENS.headerHeight }}
+        style={{
+          backgroundColor: theme.colors.surface,
+          height: CHAT_LAYOUT_TOKENS.headerHeight,
+        }}
         elevated
       >
         <Appbar.Action
@@ -156,43 +167,45 @@ export default function MessagingScreen() {
           onPress={() => navigation.dispatch(DrawerActions.openDrawer())}
         />
         <Appbar.Content
-          title="Solar Network"
+          title="Chat"
           titleStyle={{
             color: theme.colors.onSurface,
-            fontWeight: '600',
-            textAlign: 'center',
+            fontWeight: "600",
+            textAlign: "center",
           }}
         />
         <Appbar.Action
           icon="email-outline"
           iconColor={theme.colors.onSurface}
-          onPress={() => Alert.alert('邀请', '功能开发中')}
+          onPress={() => Alert.alert("邀请", "功能开发中")}
         />
       </Appbar.Header>
       <View
         style={{
           height: CHAT_LAYOUT_TOKENS.filterRowHeight,
           backgroundColor: theme.colors.surface,
-          flexDirection: 'row',
-          alignItems: 'center',
+          flexDirection: "row",
+          alignItems: "center",
           paddingHorizontal: 12,
           gap: 8,
         }}
       >
         <FilterAction
-          active={activeFilter === 'all'}
-          icon={activeFilter === 'all' ? 'inbox' : 'inbox-outline'}
-          onPress={() => setActiveFilter('all')}
+          active={activeFilter === "all"}
+          icon={activeFilter === "all" ? "inbox" : "inbox-outline"}
+          onPress={() => setActiveFilter("all")}
         />
         <FilterAction
-          active={activeFilter === 'private'}
-          icon={activeFilter === 'private' ? 'account' : 'account-outline'}
-          onPress={() => setActiveFilter('private')}
+          active={activeFilter === "private"}
+          icon={activeFilter === "private" ? "account" : "account-outline"}
+          onPress={() => setActiveFilter("private")}
         />
         <FilterAction
-          active={activeFilter === 'group'}
-          icon={activeFilter === 'group' ? 'account-group' : 'account-group-outline'}
-          onPress={() => setActiveFilter('group')}
+          active={activeFilter === "group"}
+          icon={
+            activeFilter === "group" ? "account-group" : "account-group-outline"
+          }
+          onPress={() => setActiveFilter("group")}
         />
       </View>
 
@@ -203,7 +216,9 @@ export default function MessagingScreen() {
         ItemSeparatorComponent={ItemSeparator}
         ListFooterComponent={ListFooter}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingTop: CHAT_LAYOUT_TOKENS.listTopPadding }}
+        contentContainerStyle={{
+          paddingTop: CHAT_LAYOUT_TOKENS.listTopPadding,
+        }}
         refreshing={isLoading && items.length === 0}
         onRefresh={() => {
           setOffset(0);
@@ -224,7 +239,9 @@ export default function MessagingScreen() {
                 paddingVertical: CHAT_LAYOUT_TOKENS.emptyVerticalPadding,
               }}
             >
-              <Text style={{ color: theme.colors.onSurfaceVariant }}>{loadError ?? '暂无聊天'}</Text>
+              <Text style={{ color: theme.colors.onSurfaceVariant }}>
+                {loadError ?? "暂无聊天"}
+              </Text>
             </View>
           ) : null
         }
@@ -233,7 +250,7 @@ export default function MessagingScreen() {
       <FAB.Group
         open={isFabOpen}
         visible
-        icon={isFabOpen ? 'close' : 'plus'}
+        icon={isFabOpen ? "close" : "plus"}
         style={{ bottom: CHAT_LAYOUT_TOKENS.fabEdgeInset }}
         fabStyle={{
           backgroundColor: theme.colors.primaryContainer,
@@ -242,21 +259,21 @@ export default function MessagingScreen() {
         color={theme.colors.onPrimaryContainer}
         actions={[
           {
-            icon: 'chat-plus-outline',
-            label: '新建频道',
+            icon: "chat-plus-outline",
+            label: "新建频道",
             onPress: () => {
               setIsFabOpen(false);
-              Alert.alert('新建频道', '功能开发中');
+              Alert.alert("新建频道", "功能开发中");
             },
             style: { backgroundColor: theme.colors.secondaryContainer },
             color: theme.colors.onSecondaryContainer,
           },
           {
-            icon: 'message-plus-outline',
-            label: '新建私信',
+            icon: "message-plus-outline",
+            label: "新建私信",
             onPress: () => {
               setIsFabOpen(false);
-              Alert.alert('新建私信', '功能开发中');
+              Alert.alert("新建私信", "功能开发中");
             },
             style: { backgroundColor: theme.colors.secondaryContainer },
             color: theme.colors.onSecondaryContainer,
