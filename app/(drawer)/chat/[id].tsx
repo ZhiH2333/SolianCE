@@ -117,7 +117,11 @@ function MessageBubble({
             <View
               style={{
                 borderRadius: CHAT_ROOM_TOKENS.quoteRadius,
-                backgroundColor: theme.colors.primaryFixedDim + '55',
+                backgroundColor:
+                  'primaryFixedDim' in theme.colors &&
+                  typeof (theme.colors as { primaryFixedDim?: string }).primaryFixedDim === 'string'
+                    ? (theme.colors as { primaryFixedDim: string }).primaryFixedDim + '55'
+                    : theme.colors.surfaceVariant,
                 paddingHorizontal: CHAT_ROOM_TOKENS.quotePaddingHorizontal,
                 paddingVertical: CHAT_ROOM_TOKENS.quotePaddingVertical,
                 marginBottom: 8,
@@ -178,15 +182,15 @@ export default function ChatScreen(): ReactElement {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [draft, setDraft] = useState<string>('');
   const [oldestLoadedOffset, setOldestLoadedOffset] = useState<number>(0);
-  const [hasMoreOlder, setHasMoreOlder] = useState<boolean>(false);
-  const [isLoadingOlder, setIsLoadingOlder] = useState<boolean>(false);
+  const [hasMore, setHasMore] = useState<boolean>(false);
+  const [loadingMore, setLoadingMore] = useState<boolean>(false);
+  const [page, setPage] = useState<number>(1);
   const [loadingToast, setLoadingToast] = useState<boolean>(false);
   const [loadProgress, setLoadProgress] = useState<{ current: number; total: number; round: number }>({
     current: 0,
     total: 0,
     round: 1,
   });
-  const flatListRef = useRef<FlatList<ChatMessageDto>>(null);
   const loadOlderBusyRef = useRef<boolean>(false);
   const allowLoadOlderRef = useRef<boolean>(false);
 
@@ -217,7 +221,8 @@ export default function ChatScreen(): ReactElement {
       setIsLoading(true);
       setLoadError(null);
       setOldestLoadedOffset(0);
-      setHasMoreOlder(false);
+      setHasMore(false);
+      setPage(1);
       try {
         const [conversationResult, messageWindow, meResult] = await Promise.all([
           fetchChatConversationById(sync, conversationId),
@@ -227,7 +232,10 @@ export default function ChatScreen(): ReactElement {
         setConversation(conversationResult);
         setMessages(sortMessagesDescending(messageWindow.items));
         setOldestLoadedOffset(messageWindow.oldestLoadedOffset);
-        setHasMoreOlder(messageWindow.hasMoreOlder);
+        setHasMore(messageWindow.hasMoreOlder);
+        requestAnimationFrame(() => {
+          allowLoadOlderRef.current = true;
+        });
         setMyAccountId(meResult?.id ?? '');
       } catch (error) {
         setLoadError(error instanceof Error ? error.message : '加载聊天失败');
@@ -266,14 +274,14 @@ export default function ChatScreen(): ReactElement {
     if (!allowLoadOlderRef.current) {
       return;
     }
-    if (!sync || !conversationId || !hasMoreOlder || isLoadingOlder || loadOlderBusyRef.current) {
+    if (!sync || !conversationId || !hasMore || loadingMore || loadOlderBusyRef.current) {
       return;
     }
     if (oldestLoadedOffset <= 0) {
       return;
     }
     loadOlderBusyRef.current = true;
-    setIsLoadingOlder(true);
+    setLoadingMore(true);
     try {
       const chunk = await fetchChatMessagesOlderChunk(
         sync,
@@ -283,14 +291,15 @@ export default function ChatScreen(): ReactElement {
       );
       setMessages((prev: ChatMessageDto[]) => sortMessagesDescending(mergeChatMessagesById(prev, chunk.items)));
       setOldestLoadedOffset(chunk.nextOldestOffset);
-      setHasMoreOlder(chunk.hasMoreOlder);
+      setHasMore(chunk.hasMoreOlder);
+      setPage((p: number) => p + 1);
     } catch (error) {
       setLoadError(error instanceof Error ? error.message : '加载更早消息失败');
     } finally {
-      setIsLoadingOlder(false);
+      setLoadingMore(false);
       loadOlderBusyRef.current = false;
     }
-  }, [sync, conversationId, hasMoreOlder, isLoadingOlder, oldestLoadedOffset]);
+  }, [sync, conversationId, hasMore, loadingMore, oldestLoadedOffset]);
 
   function handleChangeDraft(value: string): void {
     if (value.length > INPUT_MAX_LENGTH) return;
@@ -326,7 +335,6 @@ export default function ChatScreen(): ReactElement {
       </Appbar.Header>
 
       <FlatList
-        ref={flatListRef}
         inverted={true}
         data={messages}
         renderItem={renderMessage}
@@ -338,14 +346,12 @@ export default function ChatScreen(): ReactElement {
         }}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
-        maintainVisibleContentPosition={{
-          minIndexForVisible: 0,
-          autoscrollToTopThreshold: 24,
+        onEndReached={() => {
+          void executeLoadOlderMessages();
         }}
-        onStartReached={() => void executeLoadOlderMessages()}
-        onStartReachedThreshold={0.15}
-        ListHeaderComponent={
-          isLoadingOlder ? (
+        onEndReachedThreshold={0.3}
+        ListFooterComponent={
+          loadingMore ? (
             <View style={{ paddingVertical: 8, alignItems: 'center' }}>
               <ActivityIndicator color={theme.colors.primary} />
             </View>
