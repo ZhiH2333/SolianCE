@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ReactElement } from 'react';
 import { ActivityIndicator, FlatList, KeyboardAvoidingView, Platform, View } from 'react-native';
-import { Appbar, Button, IconButton, Snackbar, Text, TextInput, useTheme } from 'react-native-paper';
+import { Appbar, Button, IconButton, Text, TextInput, useTheme } from 'react-native-paper';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -184,27 +184,20 @@ export default function ChatScreen(): ReactElement {
   const [oldestLoadedOffset, setOldestLoadedOffset] = useState<number>(0);
   const [hasMore, setHasMore] = useState<boolean>(false);
   const [loadingMore, setLoadingMore] = useState<boolean>(false);
-  const [page, setPage] = useState<number>(1);
-  const [loadingToast, setLoadingToast] = useState<boolean>(false);
-  const [loadProgress, setLoadProgress] = useState<{ current: number; total: number; round: number }>({
-    current: 0,
-    total: 0,
-    round: 1,
-  });
+  const [, setPage] = useState<number>(1);
+  const [syncHint, setSyncHint] = useState<string | null>('正在加载最新消息...');
   const loadOlderBusyRef = useRef<boolean>(false);
   const allowLoadOlderRef = useRef<boolean>(false);
 
   useEffect(() => {
-    if (!conversationId) {
+    if (syncHint === null) {
       return;
     }
-    setLoadProgress({ current: 0, total: 20, round: 1 });
-    setLoadingToast(true);
     const timerId: ReturnType<typeof setTimeout> = setTimeout(() => {
-      setLoadingToast(false);
+      setSyncHint(null);
     }, 1500);
     return () => clearTimeout(timerId);
-  }, [conversationId]);
+  }, [syncHint]);
 
   useEffect(() => {
     const executeLoadChat = async (): Promise<void> => {
@@ -215,6 +208,7 @@ export default function ChatScreen(): ReactElement {
         setIsLoading(false);
         setLoadError(null);
         allowLoadOlderRef.current = false;
+        setSyncHint(null);
         return;
       }
       allowLoadOlderRef.current = false;
@@ -223,6 +217,7 @@ export default function ChatScreen(): ReactElement {
       setOldestLoadedOffset(0);
       setHasMore(false);
       setPage(1);
+      setSyncHint('正在加载最新消息...');
       try {
         const [conversationResult, messageWindow, meResult] = await Promise.all([
           fetchChatConversationById(sync, conversationId),
@@ -237,10 +232,13 @@ export default function ChatScreen(): ReactElement {
           allowLoadOlderRef.current = true;
         });
         setMyAccountId(meResult?.id ?? '');
+        const total: number = messageWindow.totalCount ?? messageWindow.items.length;
+        setSyncHint(`正在加载最新消息 ${messageWindow.items.length}/${total} 第1轮`);
       } catch (error) {
         setLoadError(error instanceof Error ? error.message : '加载聊天失败');
         setConversation(null);
         setMessages([]);
+        setSyncHint(null);
       } finally {
         setIsLoading(false);
       }
@@ -333,6 +331,18 @@ export default function ChatScreen(): ReactElement {
         <Appbar.Action icon="phone-outline" iconColor={theme.colors.onSurface} onPress={() => {}} />
         <Appbar.Action icon="dots-vertical" iconColor={theme.colors.onSurface} onPress={() => {}} />
       </Appbar.Header>
+
+      {syncHint ? (
+        <View
+          style={{
+            backgroundColor: theme.colors.inverseSurface,
+            paddingHorizontal: 16,
+            paddingVertical: 8,
+          }}
+        >
+          <Text style={{ color: theme.colors.inverseOnSurface, fontSize: 13 }}>{syncHint}</Text>
+        </View>
+      ) : null}
 
       <FlatList
         inverted={true}
@@ -437,15 +447,6 @@ export default function ChatScreen(): ReactElement {
           </View>
         </View>
       </KeyboardAvoidingView>
-
-      <Snackbar
-        visible={loadingToast}
-        onDismiss={() => setLoadingToast(false)}
-        duration={600000}
-        style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 999 }}
-      >
-        {`正在加载最新消息 ${loadProgress.current}/${loadProgress.total} 第${loadProgress.round}轮`}
-      </Snackbar>
     </View>
   );
 }
