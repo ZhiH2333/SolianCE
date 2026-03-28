@@ -1,7 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ReactElement } from 'react';
-import { ActivityIndicator, FlatList, KeyboardAvoidingView, Platform, View } from 'react-native';
-import { Appbar, Button, IconButton, Snackbar, Text, TextInput, useTheme } from 'react-native-paper';
+import {
+  ActivityIndicator,
+  FlatList,
+  KeyboardAvoidingView,
+  Platform,
+  View,
+  type ViewToken,
+} from 'react-native';
+import { Appbar, Button, FAB, IconButton, Snackbar, Text, TextInput, useTheme } from 'react-native-paper';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -22,6 +29,8 @@ const INPUT_MAX_LENGTH = 800;
 const INITIAL_LOAD_SIZE = 100;
 const PAGINATION_SIZE = 200;
 const TRUNCATE_SIZE = 20;
+/** 视口内若完全看不到这 N 条最新消息，则显示「回到最新」FAB */
+const LATEST_MESSAGES_VISIBILITY_COUNT = 5;
 
 const CHAT_ROOM_TOKENS = {
   messageRadius: 16,
@@ -50,6 +59,8 @@ const CHAT_ROOM_TOKENS = {
   inputCardElevation: 2,
   inputActionSize: 22,
   messageBottomSafeArea: 116,
+  /** FAB 距屏幕底边：输入条估算高度 + 与输入条间距（另加 safe area insets.bottom） */
+  fabStackAboveInput: 80,
 } as const;
 
 /** 最新消息在前（index 0），配合 inverted FlatList 将最新固定在底部 */
@@ -190,6 +201,44 @@ export default function ChatScreen(): ReactElement {
   const snackbarShown = useRef<boolean>(false);
   const loopGenerationRef = useRef<number>(0);
   const loadOlderBusyRef = useRef<boolean>(false);
+  const flatListRef = useRef<FlatList<ChatMessageDto>>(null);
+  const messagesCountRef = useRef<number>(0);
+  const viewabilityConfig = useRef({
+    itemVisiblePercentThreshold: 12,
+    minimumViewTime: 80,
+  }).current;
+
+  const [showJumpToLatestFab, setShowJumpToLatestFab] = useState<boolean>(false);
+
+  useEffect(() => {
+    messagesCountRef.current = messages.length;
+  }, [messages.length]);
+
+  const onViewableItemsChanged = useCallback(
+    ({ viewableItems }: { viewableItems: ViewToken[] }) => {
+      const count: number = messagesCountRef.current;
+      if (count === 0) {
+        setShowJumpToLatestFab(false);
+        return;
+      }
+      const visible: Set<number> = new Set<number>();
+      for (const t of viewableItems) {
+        if (t.isViewable && t.index != null && t.index >= 0) {
+          visible.add(t.index);
+        }
+      }
+      const latestMaxIndex: number = Math.min(LATEST_MESSAGES_VISIBILITY_COUNT - 1, count - 1);
+      let anyLatestVisible = false;
+      for (let i = 0; i <= latestMaxIndex; i += 1) {
+        if (visible.has(i)) {
+          anyLatestVisible = true;
+          break;
+        }
+      }
+      setShowJumpToLatestFab(!anyLatestVisible);
+    },
+    [],
+  );
 
   const handleLoadLatestOnly = useCallback((): void => {
     loopGenerationRef.current += 1;
@@ -420,10 +469,12 @@ export default function ChatScreen(): ReactElement {
       ) : null}
 
       <FlatList
+        ref={flatListRef}
         inverted={true}
         data={messages}
         renderItem={renderMessage}
         keyExtractor={(item: ChatMessageDto) => item.id}
+        style={{ flex: 1 }}
         contentContainerStyle={{
           paddingTop: CHAT_ROOM_TOKENS.listPaddingTop,
           paddingHorizontal: CHAT_ROOM_TOKENS.listPaddingHorizontal,
@@ -431,6 +482,8 @@ export default function ChatScreen(): ReactElement {
         }}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
+        viewabilityConfig={viewabilityConfig}
+        onViewableItemsChanged={onViewableItemsChanged}
         onEndReached={() => {
           void loadMoreOlderMessages();
         }}
@@ -519,6 +572,23 @@ export default function ChatScreen(): ReactElement {
           </View>
         </View>
       </KeyboardAvoidingView>
+
+      {showJumpToLatestFab ? (
+        <FAB
+          icon="arrow-down"
+          label="回到最新"
+          visible={true}
+          onPress={() => {
+            // inverted 列表：offset 0 = 视觉最底部（最新一条）；scrollToEnd 会滚到相反一侧
+            flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+          }}
+          style={{
+            position: 'absolute',
+            right: 16,
+            bottom: insets.bottom + CHAT_ROOM_TOKENS.fabStackAboveInput,
+          }}
+        />
+      ) : null}
 
       <Snackbar
         visible={showTimeoutSnackbar}
