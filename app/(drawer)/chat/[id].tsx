@@ -33,10 +33,15 @@ const TRUNCATE_SIZE = 20;
 const LATEST_MESSAGES_VISIBILITY_COUNT = 5;
 
 const CHAT_ROOM_TOKENS = {
-  messageRadius: 16,
+  messageRadius: 22,
   messagePaddingHorizontal: 12,
   messagePaddingVertical: 10,
-  messageItemVertical: 6,
+  /** 分组首条（含头像行）与下一发送者之间的底部留白 */
+  messageBlockPaddingVertical: 10,
+  /** 同组连续气泡之间：与上一条的间距 */
+  messageContinuationGap: 3,
+  /** 连续气泡所在行的上下 padding（略小于首条） */
+  messageContinuationPaddingV: 3,
   messageRowGap: 10,
   listPaddingTop: 8,
   listPaddingHorizontal: 12,
@@ -70,106 +75,182 @@ function sortMessagesDescending(messages: ChatMessageDto[]): ChatMessageDto[] {
   );
 }
 
-function formatMessageFullDateTime(isoString: string): string {
-  return format(new Date(isoString), 'yyyy/M/d HH:mm');
+function formatMessageTimeShort(isoString: string): string {
+  return format(new Date(isoString), 'HH:mm');
+}
+
+/** 与上一条（更旧）相比是否为新分组首条：更旧一条不存在或发送者不同 */
+function computeShowGroupHeader(messages: ChatMessageDto[], index: number): boolean {
+  const older: ChatMessageDto | undefined = messages[index + 1];
+  const current: ChatMessageDto | undefined = messages[index];
+  if (!current) {
+    return true;
+  }
+  if (!older) {
+    return true;
+  }
+  return older.senderId !== current.senderId;
 }
 
 function MessageBubble({
   message,
   isSelf,
+  showGroupHeader,
 }: {
   message: ChatMessageDto;
   isSelf: boolean;
+  showGroupHeader: boolean;
 }) {
   const theme = useTheme();
 
-  const containerBackgroundColor = isSelf ? theme.colors.primaryContainer : theme.colors.surfaceVariant;
-  const contentColor = isSelf ? theme.colors.onPrimaryContainer : theme.colors.onSurfaceVariant;
-  const alignSelf = isSelf ? 'flex-end' : 'flex-start';
-  const bubbleBorderRadius = CHAT_ROOM_TOKENS.messageRadius;
+  const bubbleBg = isSelf ? theme.colors.primaryContainer : theme.colors.secondaryContainer;
+  const contentColor = isSelf ? theme.colors.onPrimaryContainer : theme.colors.onSurface;
+  const quoteTint =
+    'primaryFixedDim' in theme.colors &&
+    typeof (theme.colors as { primaryFixedDim?: string }).primaryFixedDim === 'string'
+      ? (theme.colors as { primaryFixedDim: string }).primaryFixedDim + '55'
+      : theme.colors.surfaceVariant;
+  const bubbleRadius = CHAT_ROOM_TOKENS.messageRadius;
   const showQuote: boolean = Boolean(message.quoteSenderName || message.quoteContent);
+  const avatarGap = CHAT_ROOM_TOKENS.messageRowGap;
+  const metaColor = theme.colors.onSurface;
+
+  const bubbleBody = (
+    <View
+      style={{
+        backgroundColor: bubbleBg,
+        borderRadius: bubbleRadius,
+        paddingHorizontal: CHAT_ROOM_TOKENS.messagePaddingHorizontal,
+        paddingVertical: CHAT_ROOM_TOKENS.messagePaddingVertical,
+        maxWidth: CHAT_ROOM_TOKENS.bubbleMaxWidth,
+        alignSelf: isSelf ? 'flex-end' : 'flex-start',
+        flexShrink: 1,
+      }}
+    >
+      {showQuote ? (
+        <View
+          style={{
+            borderRadius: CHAT_ROOM_TOKENS.quoteRadius,
+            backgroundColor: quoteTint,
+            paddingHorizontal: CHAT_ROOM_TOKENS.quotePaddingHorizontal,
+            paddingVertical: CHAT_ROOM_TOKENS.quotePaddingVertical,
+            marginBottom: 8,
+          }}
+        >
+          <Text variant="labelSmall" style={{ color: contentColor, fontWeight: '600' }} numberOfLines={1}>
+            {message.quoteSenderName ?? '引用消息'}
+          </Text>
+          <Text variant="bodySmall" style={{ color: contentColor }} numberOfLines={2}>
+            {message.quoteContent ?? ''}
+          </Text>
+        </View>
+      ) : null}
+      <Text variant="bodyMedium" style={{ color: contentColor, lineHeight: 22 }}>
+        {message.content}
+      </Text>
+    </View>
+  );
+
+  const blockPad = CHAT_ROOM_TOKENS.messageBlockPaddingVertical;
+  const contPad = CHAT_ROOM_TOKENS.messageContinuationPaddingV;
+  const contGap = CHAT_ROOM_TOKENS.messageContinuationGap;
+  const paddingTop = showGroupHeader ? 6 : contPad;
+  const paddingBottom = showGroupHeader ? blockPad : contPad;
+
+  if (isSelf) {
+    return (
+      <View
+        style={{
+          alignSelf: 'flex-end',
+          width: '100%',
+          maxWidth: '100%',
+          paddingTop,
+          paddingBottom,
+        }}
+      >
+        {showGroupHeader ? (
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'flex-start',
+              justifyContent: 'flex-end',
+              gap: avatarGap,
+              marginBottom: 10,
+            }}
+          >
+            <View style={{ alignItems: 'flex-end', flexShrink: 1 }}>
+              <Text style={{ color: metaColor, fontWeight: '600', fontSize: 15 }} numberOfLines={2}>
+                {message.senderName}
+              </Text>
+              <Text
+                style={{
+                  color: metaColor,
+                  fontSize: 12,
+                  marginTop: 2,
+                  fontVariant: ['tabular-nums'],
+                }}
+              >
+                {formatMessageTimeShort(message.sentAt)}
+              </Text>
+            </View>
+            <UserAvatar
+              uri={message.senderAvatar ?? ''}
+              name={message.senderName}
+              size={CHAT_ROOM_TOKENS.avatarSize}
+            />
+          </View>
+        ) : null}
+        <View
+          style={{
+            alignItems: 'flex-end',
+            marginTop: showGroupHeader ? 0 : contGap,
+          }}
+        >
+          {bubbleBody}
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View
       style={{
-        alignSelf,
-        maxWidth: CHAT_ROOM_TOKENS.bubbleMaxWidth,
-        marginVertical: CHAT_ROOM_TOKENS.messageItemVertical,
-        gap: 6,
+        alignSelf: 'flex-start',
+        width: '100%',
+        maxWidth: '100%',
+        paddingTop,
+        paddingBottom,
       }}
     >
-      {!isSelf ? (
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-          <Text variant="labelMedium" style={{ color: theme.colors.onSurface, fontWeight: '600' }}>
-            {message.senderName}
-          </Text>
-        </View>
-      ) : null}
-      <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: CHAT_ROOM_TOKENS.messageRowGap }}>
-        {!isSelf ? (
-          <UserAvatar
-            uri={message.senderAvatar ?? ''}
-            name={message.senderName}
-            size={CHAT_ROOM_TOKENS.avatarSize}
-          />
-        ) : null}
-        <View style={{ maxWidth: CHAT_ROOM_TOKENS.bubbleMaxWidth }}>
-          <View
-            style={{
-              backgroundColor: containerBackgroundColor,
-              borderRadius: bubbleBorderRadius,
-              paddingHorizontal: CHAT_ROOM_TOKENS.messagePaddingHorizontal,
-              paddingVertical: CHAT_ROOM_TOKENS.messagePaddingVertical,
-            }}
-          >
-            {showQuote ? (
-              <View
+      {showGroupHeader ? (
+        <View>
+          <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: avatarGap }}>
+            <UserAvatar
+              uri={message.senderAvatar ?? ''}
+              name={message.senderName}
+              size={CHAT_ROOM_TOKENS.avatarSize}
+            />
+            <View style={{ flex: 1, flexShrink: 1, paddingRight: 8, minWidth: 0 }}>
+              <Text style={{ color: metaColor, fontWeight: '600', fontSize: 15 }} numberOfLines={2}>
+                {message.senderName}
+              </Text>
+              <Text
                 style={{
-                  borderRadius: CHAT_ROOM_TOKENS.quoteRadius,
-                  backgroundColor:
-                    'primaryFixedDim' in theme.colors &&
-                    typeof (theme.colors as { primaryFixedDim?: string }).primaryFixedDim === 'string'
-                      ? (theme.colors as { primaryFixedDim: string }).primaryFixedDim + '55'
-                      : theme.colors.surfaceVariant,
-                  paddingHorizontal: CHAT_ROOM_TOKENS.quotePaddingHorizontal,
-                  paddingVertical: CHAT_ROOM_TOKENS.quotePaddingVertical,
-                  marginBottom: 8,
+                  color: metaColor,
+                  fontSize: 12,
+                  marginTop: 2,
+                  fontVariant: ['tabular-nums'],
                 }}
               >
-                <Text variant="labelSmall" style={{ color: contentColor, fontWeight: '600' }} numberOfLines={1}>
-                  {message.quoteSenderName ?? '引用消息'}
-                </Text>
-                <Text variant="bodySmall" style={{ color: contentColor }} numberOfLines={2}>
-                  {message.quoteContent ?? ''}
-                </Text>
-              </View>
-            ) : null}
-            <Text variant="bodyMedium" style={{ color: contentColor, lineHeight: 20 }}>
-              {message.content}
-            </Text>
+                {formatMessageTimeShort(message.sentAt)}
+              </Text>
+            </View>
           </View>
-          <Text
-            style={{
-              marginTop: 4,
-              fontSize: 11,
-              color: theme.colors.onSurfaceVariant,
-              textAlign: isSelf ? 'right' : 'left',
-              fontVariant: ['tabular-nums'],
-            }}
-          >
-            {formatMessageFullDateTime(message.sentAt)}
-          </Text>
+          <View style={{ marginTop: 10 }}>{bubbleBody}</View>
         </View>
-        {isSelf && (
-          <View
-            style={{
-              width: CHAT_ROOM_TOKENS.avatarSize,
-              height: CHAT_ROOM_TOKENS.avatarSize,
-              borderRadius: CHAT_ROOM_TOKENS.avatarRadius,
-            }}
-          />
-        )}
-      </View>
+      ) : (
+        <View style={{ marginTop: contGap, alignItems: 'flex-start' }}>{bubbleBody}</View>
+      )}
     </View>
   );
 }
@@ -425,9 +506,10 @@ export default function ChatScreen(): ReactElement {
     setDraft(value);
   }
 
-  function renderMessage({ item }: { item: ChatMessageDto }): ReactElement {
+  function renderMessage({ item, index }: { item: ChatMessageDto; index: number }): ReactElement {
     const isSelf: boolean = myAccountId.length > 0 ? item.senderId === myAccountId : false;
-    return <MessageBubble message={item} isSelf={isSelf} />;
+    const showGroupHeader: boolean = computeShowGroupHeader(messages, index);
+    return <MessageBubble message={item} isSelf={isSelf} showGroupHeader={showGroupHeader} />;
   }
 
   const keyboardBehavior: 'padding' | 'height' | undefined =
@@ -471,6 +553,7 @@ export default function ChatScreen(): ReactElement {
       <FlatList
         ref={flatListRef}
         inverted={true}
+        removeClippedSubviews={false}
         data={messages}
         renderItem={renderMessage}
         keyExtractor={(item: ChatMessageDto) => item.id}
