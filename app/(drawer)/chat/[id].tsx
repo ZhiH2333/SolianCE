@@ -183,14 +183,16 @@ export default function ChatScreen(): ReactElement {
     total: 0,
     round: 1,
   });
-  const listRef = useRef<FlatList<ChatMessageDto> | null>(null);
-  const shouldScrollToLatestRef = useRef<boolean>(false);
+  const flatListRef = useRef<FlatList<ChatMessageDto>>(null);
   const loadOlderBusyRef = useRef<boolean>(false);
   const allowLoadOlderRef = useRef<boolean>(false);
 
-  const executeScrollToLatest = useCallback((animated: boolean): void => {
-    listRef.current?.scrollToEnd({ animated });
-  }, []);
+  useEffect(() => {
+    flatListRef.current?.scrollToEnd({ animated: false });
+    requestAnimationFrame(() => {
+      allowLoadOlderRef.current = true;
+    });
+  }, [messages]);
 
   useEffect(() => {
     if (!conversationId) {
@@ -230,7 +232,6 @@ export default function ChatScreen(): ReactElement {
         setMessages(sortMessagesByTime(messageWindow.items));
         setOldestLoadedOffset(messageWindow.oldestLoadedOffset);
         setHasMoreOlder(messageWindow.hasMoreOlder);
-        shouldScrollToLatestRef.current = true;
         setMyAccountId(meResult?.id ?? '');
       } catch (error) {
         setLoadError(error instanceof Error ? error.message : '加载聊天失败');
@@ -256,7 +257,6 @@ export default function ChatScreen(): ReactElement {
       const sent: ChatMessageDto | null = await postChatMessage(sync, conversationId, trimmed);
       if (sent) {
         setMessages((prev: ChatMessageDto[]) => mergeChatMessagesById(prev, [sent]));
-        shouldScrollToLatestRef.current = true;
       }
       setDraft('');
     } catch (error) {
@@ -330,9 +330,9 @@ export default function ChatScreen(): ReactElement {
       </Appbar.Header>
 
       <FlatList
-        ref={listRef}
+        ref={flatListRef}
         inverted={true}
-        data={[...messages].reverse()}
+        data={messages}
         renderItem={renderMessage}
         keyExtractor={(item: ChatMessageDto) => item.id}
         contentContainerStyle={{
@@ -355,18 +355,7 @@ export default function ChatScreen(): ReactElement {
             </View>
           ) : null
         }
-        onContentSizeChange={() => {
-          if (!shouldScrollToLatestRef.current) {
-            return;
-          }
-          shouldScrollToLatestRef.current = false;
-          requestAnimationFrame(() => {
-            executeScrollToLatest(false);
-            requestAnimationFrame(() => {
-              allowLoadOlderRef.current = true;
-            });
-          });
-        }}
+        onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
         ListEmptyComponent={
           !isLoading ? (
             <Text style={{ color: theme.colors.onSurfaceVariant, paddingHorizontal: 8, paddingTop: 8 }}>
