@@ -1,6 +1,6 @@
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   KeyboardAvoidingView,
@@ -23,10 +23,26 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AttachmentPreview } from '@/components/common/AttachmentPreview';
 import UserAvatar from '@/components/common/UserAvatar';
+import { fetchAccountMe } from '@/lib/api/content-api';
+import { API_BASE_URL } from '@/lib/api/http-client';
+import { useContentApiSync } from '@/lib/hooks/use-content-api-sync';
 import { uploadFile, type DriveFile } from '@/lib/drive';
 
 const MAX_WIDTH: number = 560;
-const AVATAR_SIZE: number = 40;
+
+function resolveAvatarToAbsoluteUrl(raw: string): string {
+  const s: string = raw.trim();
+  if (s.length === 0) {
+    return '';
+  }
+  if (s.startsWith('http://') || s.startsWith('https://')) {
+    return s;
+  }
+  if (s.startsWith('/')) {
+    return `${API_BASE_URL}${s}`;
+  }
+  return `${API_BASE_URL}/drive/files/${s}`;
+}
 
 type AttachmentSlotUploading = {
   localId: string;
@@ -61,6 +77,9 @@ export default function ComposeScreen(): React.JSX.Element {
   const theme = useTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const sync = useContentApiSync();
+  const [composerAvatarUri, setComposerAvatarUri] = useState<string>('');
+  const [composerDisplayName, setComposerDisplayName] = useState<string>('用户');
   const [title, setTitle] = useState<string>('');
   const [description, setDescription] = useState<string>('');
   const [content, setContent] = useState<string>('');
@@ -68,6 +87,36 @@ export default function ComposeScreen(): React.JSX.Element {
   const [snackbarVisible, setSnackbarVisible] = useState<boolean>(false);
   const [snackbarMessage, setSnackbarMessage] = useState<string>('');
   const dynamicTitle = title.trim().length === 0 ? '发布帖子' : title.trim();
+  useEffect(() => {
+    if (!sync) {
+      setComposerAvatarUri('');
+      setComposerDisplayName('用户');
+      return;
+    }
+    let cancelled: boolean = false;
+    void (async (): Promise<void> => {
+      try {
+        const me = await fetchAccountMe(sync);
+        if (cancelled) {
+          return;
+        }
+        if (!me) {
+          setComposerAvatarUri('');
+          setComposerDisplayName('用户');
+          return;
+        }
+        setComposerAvatarUri(resolveAvatarToAbsoluteUrl(me.avatar));
+        setComposerDisplayName(me.name.length > 0 ? me.name : '用户');
+      } catch {
+        if (!cancelled) {
+          setComposerAvatarUri('');
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [sync]);
   const showUploadProgress: boolean = useMemo(
     () => attachments.some((s) => s.status === 'uploading'),
     [attachments],
@@ -220,7 +269,9 @@ export default function ComposeScreen(): React.JSX.Element {
         <View style={{ width: '100%', maxWidth: MAX_WIDTH }}>
           <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
             <View style={{ paddingTop: 8, marginRight: 12 }}>
-              <UserAvatar uri="" name="发布者" size={AVATAR_SIZE} />
+              <View style={{ width: 40, height: 40 }}>
+                <UserAvatar uri={composerAvatarUri} name={composerDisplayName} size={40} />
+              </View>
             </View>
             <View style={{ flex: 1, minWidth: 0 }}>
               <TextInput
