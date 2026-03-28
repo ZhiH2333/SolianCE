@@ -92,7 +92,7 @@ function MessageBubble({
           </Text>
         </View>
       ) : null}
-      <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: CHAT_ROOM_TOKENS.messageRowGap }}>
+      <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: CHAT_ROOM_TOKENS.messageRowGap }}>
         {!isSelf ? (
           <UserAvatar
             uri={message.senderAvatar ?? ''}
