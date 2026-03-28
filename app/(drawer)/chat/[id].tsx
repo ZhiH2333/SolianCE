@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ReactElement } from 'react';
 import { ActivityIndicator, FlatList, KeyboardAvoidingView, Platform, View } from 'react-native';
-import { Appbar, Button, IconButton, Text, TextInput, useTheme } from 'react-native-paper';
+import { Appbar, Button, IconButton, Snackbar, Text, TextInput, useTheme } from 'react-native-paper';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -177,6 +177,12 @@ export default function ChatScreen(): ReactElement {
   const [oldestLoadedOffset, setOldestLoadedOffset] = useState<number>(0);
   const [hasMoreOlder, setHasMoreOlder] = useState<boolean>(false);
   const [isLoadingOlder, setIsLoadingOlder] = useState<boolean>(false);
+  const [loadingToast, setLoadingToast] = useState<boolean>(false);
+  const [loadProgress, setLoadProgress] = useState<{ current: number; total: number; round: number }>({
+    current: 0,
+    total: 0,
+    round: 1,
+  });
   const listRef = useRef<FlatList<ChatMessageDto> | null>(null);
   const shouldScrollToLatestRef = useRef<boolean>(false);
   const loadOlderBusyRef = useRef<boolean>(false);
@@ -185,6 +191,18 @@ export default function ChatScreen(): ReactElement {
   const executeScrollToLatest = useCallback((animated: boolean): void => {
     listRef.current?.scrollToEnd({ animated });
   }, []);
+
+  useEffect(() => {
+    if (!conversationId) {
+      return;
+    }
+    setLoadProgress({ current: 0, total: 20, round: 1 });
+    setLoadingToast(true);
+    const timerId: ReturnType<typeof setTimeout> = setTimeout(() => {
+      setLoadingToast(false);
+    }, 1500);
+    return () => clearTimeout(timerId);
+  }, [conversationId]);
 
   useEffect(() => {
     const executeLoadChat = async (): Promise<void> => {
@@ -429,6 +447,15 @@ export default function ChatScreen(): ReactElement {
           </View>
         </View>
       </KeyboardAvoidingView>
+
+      <Snackbar
+        visible={loadingToast}
+        onDismiss={() => setLoadingToast(false)}
+        duration={600000}
+        style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 999 }}
+      >
+        {`正在加载最新消息 ${loadProgress.current}/${loadProgress.total} 第${loadProgress.round}轮`}
+      </Snackbar>
     </View>
   );
 }
