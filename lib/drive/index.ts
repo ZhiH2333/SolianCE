@@ -18,6 +18,8 @@ export interface DriveFile {
   mimeType: string;
   size: number;
   type: 'image' | 'video' | 'audio' | 'file';
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 function readRecord(value: unknown): Record<string, unknown> | null {
@@ -127,16 +129,20 @@ export function detectFileType(mimeType: string): DriveFile['type'] {
 }
 
 function mapPayloadToDriveFile(data: unknown, fallbackId?: string): DriveFile {
+  console.log('[Drive API] mapPayloadToDriveFile input:', JSON.stringify(data).slice(0, 200));
   const row: Record<string, unknown> | null = readRecord(data);
   if (!row) {
+    console.log('[Drive API] mapPayloadToDriveFile: row is null');
     throw new Error('无效的文件响应');
   }
   const nested: Record<string, unknown> = readRecord(row.data) ?? row;
   const id: string =
-    pickString(nested, ['id', 'hash']) ||
-    pickString(row, ['id', 'hash']) ||
+    pickString(nested, ['id', 'hash', 'object_id', 'objectId']) ||
+    pickString(row, ['id', 'hash', 'object_id', 'objectId']) ||
     (fallbackId ?? '');
+  console.log('[Drive API] mapPayloadToDriveFile: id =', id);
   if (id.length === 0) {
+    console.log('[Drive API] mapPayloadToDriveFile: id is empty');
     throw new Error('无效的文件响应');
   }
   const name: string =
@@ -150,7 +156,10 @@ function mapPayloadToDriveFile(data: unknown, fallbackId?: string): DriveFile {
   const size: number = pickSize(nested) || pickSize(row);
   const url: string = extractUrlFromPayload(nested, id) || extractUrlFromPayload(row, id);
   const type: DriveFile['type'] = detectFileType(mimeType);
-  return { id, url, name, mimeType, size, type };
+  const createdAt: string = pickString(nested, ['created_at', 'createdAt']) || pickString(row, ['created_at', 'createdAt']) || '';
+  const updatedAt: string = pickString(nested, ['updated_at', 'updatedAt']) || pickString(row, ['updated_at', 'updatedAt']) || '';
+  console.log('[Drive API] mapPayloadToDriveFile: returning', { id, name, mimeType, size, type });
+  return { id, url: url || `${API_BASE_URL}/drive/files/${id}`, name, mimeType, size, type, createdAt, updatedAt };
 }
 
 function isAccessTokenExpired(expiresAt: string | null): boolean {
@@ -348,4 +357,151 @@ export async function uploadFile(
   );
   await persistTokenIfRefreshed(pair, completeResult.tokenPair);
   return mapPayloadToDriveFile(completeResult.data);
+}
+
+export interface DriveQuota {
+  used: number;
+  total: number;
+  fileCount: number;
+}
+
+function mapJsonToQuota(data: unknown): DriveQuota {
+  const root: Record<string, unknown> | null = readRecord(data);
+  const used: number = pickNumberField(root ?? {}, ['used', 'used_bytes', 'usedBytes']) || 0;
+  const total: number = pickNumberField(root ?? {}, ['total', 'quota', 'limit', 'total_bytes', 'totalBytes']) || 0;
+  const fileCount: number = pickNumberField(root ?? {}, ['count', 'file_count', 'fileCount', 'files']) || 0;
+  return { used, total, fileCount };
+}
+
+export async function getQuota(): Promise<DriveQuota> {
+  const before: TokenPair = await loadAuthorizedTokenPair();
+  const { data, tokenPair } = await performAuthorizedFetch('/drive/billing/quota', { method: 'GET' }, before);
+  await persistTokenIfRefreshed(before, tokenPair);
+  return mapJsonToQuota(data);
+}
+
+export async function getUsage(): Promise<DriveQuota> {
+  const before: TokenPair = await loadAuthorizedTokenPair();
+  const { data, tokenPair } = await performAuthorizedFetch('/drive/billing/usage', { method: 'GET' }, before);
+  await persistTokenIfRefreshed(before, tokenPair);
+  return mapJsonToQuota(data);
+}
+
+export async function getIndexedFiles(
+  offset: number = 0,
+  take: number = 20,
+): Promise<{ items: DriveFile[]; totalCount: number | null }> {
+  const before: TokenPair = await loadAuthorizedTokenPair();
+  const params: URLSearchParams = new URLSearchParams({
+    offset: String(offset),
+    take: String(take),
+  });
+  const { data, tokenPair } = await performAuthorizedFetch(
+    `/drive/index/browse?${params.toString()}`,
+    { method: 'GET' },
+    before,
+  );
+  await persistTokenIfRefreshed(before, tokenPair);
+  console.log('[Drive API] getIndexedFiles response:', JSON.stringify(data).slice(0, 1000));
+  const root = data;
+  let itemsRaw: unknown[] = [];
+  if (Array.isArray(root)) {
+    itemsRaw = root;
+  } else if (root && typeof root === 'object') {
+    if (Array.isArray((root as any).items)) {
+      itemsRaw = (root as any).items;
+    } else if (Array.isArray((root as any).data)) {
+      itemsRaw = (root as any).data;
+    } else if (Array.isArray((root as any).files)) {
+      itemsRaw = (root as any).files;
+    } else if (Array.isArray((root as any).list)) {
+      itemsRaw = (root as any).list;
+    }
+  }
+  console.log('[Drive API] itemsRaw:', itemsRaw.length);
+  const items: DriveFile[] = [];
+  for (const raw of itemsRaw) {
+    try {
+      const file = mapPayloadToDriveFile(raw);
+      console.log('[Drive API] mapped file:', file.id, file.name);
+      items.push(file);
+    } catch (e) {
+      console.log('[Drive API] Failed to map file:', e);
+    }
+  }
+  return { items, totalCount: items.length > 0 ? items.length : null };
+}
+
+export async function getUnindexedFiles(
+  offset: number = 0,
+  take: number = 20,
+): Promise<{ items: DriveFile[]; totalCount: number | null }> {
+  const before: TokenPair = await loadAuthorizedTokenPair();
+  const params: URLSearchParams = new URLSearchParams({
+    offset: String(offset),
+    take: String(take),
+  });
+  const { data, tokenPair } = await performAuthorizedFetch(
+    `/drive/index/unindexed?${params.toString()}`,
+    { method: 'GET' },
+    before,
+  );
+  await persistTokenIfRefreshed(before, tokenPair);
+  console.log('[Drive API] getUnindexedFiles response:', JSON.stringify(data).slice(0, 1000));
+  const root = data;
+  let itemsRaw: unknown[] = [];
+  if (Array.isArray(root)) {
+    itemsRaw = root;
+  } else if (root && typeof root === 'object') {
+    if (Array.isArray((root as any).items)) {
+      itemsRaw = (root as any).items;
+    } else if (Array.isArray((root as any).data)) {
+      itemsRaw = (root as any).data;
+    } else if (Array.isArray((root as any).files)) {
+      itemsRaw = (root as any).files;
+    }
+  }
+  console.log('[Drive API] unindexed itemsRaw:', itemsRaw.length);
+  const items: DriveFile[] = [];
+  for (const raw of itemsRaw) {
+    try {
+      const file = mapPayloadToDriveFile(raw);
+      console.log('[Drive API] mapped unindexed file:', file.id, file.name);
+      items.push(file);
+    } catch (e) {
+      console.log('[Drive API] Failed to map unindexed file:', e);
+    }
+  }
+  return { items, totalCount: items.length > 0 ? items.length : null };
+}
+
+export async function deleteFile(fileId: string): Promise<void> {
+  const before: TokenPair = await loadAuthorizedTokenPair();
+  const { tokenPair } = await performAuthorizedFetch(
+    `/drive/files/${encodeURIComponent(fileId)}`,
+    { method: 'DELETE' },
+    before,
+  );
+  await persistTokenIfRefreshed(before, tokenPair);
+}
+
+export async function removeIndex(fileId: string): Promise<void> {
+  const before: TokenPair = await loadAuthorizedTokenPair();
+  const { tokenPair } = await performAuthorizedFetch(
+    `/drive/index/remove/${encodeURIComponent(fileId)}`,
+    { method: 'DELETE' },
+    before,
+  );
+  await persistTokenIfRefreshed(before, tokenPair);
+}
+
+export async function batchDeleteFiles(fileIds: string[]): Promise<void> {
+  if (fileIds.length === 0) return;
+  const before: TokenPair = await loadAuthorizedTokenPair();
+  const body: Record<string, unknown> = { ids: fileIds };
+  const { tokenPair } = await performAuthorizedFetch('/drive/files/batches/delete', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  }, before);
+  await persistTokenIfRefreshed(before, tokenPair);
 }
