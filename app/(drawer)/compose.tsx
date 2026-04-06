@@ -23,8 +23,8 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AttachmentPreview } from '@/components/common/AttachmentPreview';
 import UserAvatar from '@/components/common/UserAvatar';
-import { fetchAccountMe } from '@/lib/api/content-api';
-import { API_BASE_URL } from '@/lib/api/http-client';
+import { fetchAccountMe, syncTokenIfChanged } from '@/lib/api/content-api';
+import { API_BASE_URL, performAuthorizedFetch } from '@/lib/api/http-client';
 import { useContentApiSync } from '@/lib/hooks/use-content-api-sync';
 import { uploadFile, type DriveFile } from '@/lib/drive';
 
@@ -86,6 +86,7 @@ export default function ComposeScreen(): React.JSX.Element {
   const [attachments, setAttachments] = useState<AttachmentSlot[]>([]);
   const [snackbarVisible, setSnackbarVisible] = useState<boolean>(false);
   const [snackbarMessage, setSnackbarMessage] = useState<string>('');
+  const [isPublishing, setIsPublishing] = useState<boolean>(false);
   const dynamicTitle = title.trim().length === 0 ? '发布帖子' : title.trim();
   useEffect(() => {
     if (!sync) {
@@ -123,6 +124,10 @@ export default function ComposeScreen(): React.JSX.Element {
   );
   const aggregateProgress: number = useMemo(
     () => computeAggregateUploadProgress(attachments),
+    [attachments],
+  );
+  const hasDoneAttachment: boolean = useMemo(
+    () => attachments.some((s) => s.status === 'done'),
     [attachments],
   );
   const showSnackbar = useCallback((message: string) => {
@@ -204,13 +209,54 @@ export default function ComposeScreen(): React.JSX.Element {
       doc.mimeType && doc.mimeType.length > 0 ? doc.mimeType : 'application/octet-stream';
     await runUpload({ uri: doc.uri, name, type });
   }, [runUpload]);
-  const executePublish = useCallback(() => {
+  const handlePublish = useCallback(async (): Promise<void> => {
+    if (!sync) {
+      showSnackbar('请先登录');
+      return;
+    }
+    if (attachments.some((s) => s.status === 'uploading')) {
+      showSnackbar('请等待附件上传完成');
+      return;
+    }
+    const bodyContent: string = content.trim();
     const attachmentIds: string[] = attachments
       .filter((s): s is AttachmentSlotDone => s.status === 'done')
       .map((s) => s.file.id);
-    console.log({ title, description, content, attachmentIds });
-    router.back();
-  }, [attachments, content, description, router, title]);
+    if (bodyContent.length === 0 && attachmentIds.length === 0) {
+      showSnackbar('请输入正文或添加附件');
+      return;
+    }
+    const payload: Record<string, unknown> = {
+      content: bodyContent,
+      visibility: 0,
+      type: 0,
+    };
+    const trimmedTitle: string = title.trim();
+    if (trimmedTitle.length > 0) {
+      payload.title = trimmedTitle;
+    }
+    const trimmedDescription: string = description.trim();
+    if (trimmedDescription.length > 0) {
+      payload.description = trimmedDescription;
+    }
+    if (attachmentIds.length > 0) {
+      payload.attachments = attachmentIds;
+    }
+    setIsPublishing(true);
+    try {
+      const { tokenPair } = await performAuthorizedFetch('/sphere/posts', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }, sync.tokenPair);
+      await syncTokenIfChanged(sync, tokenPair);
+      router.back();
+    } catch (err: unknown) {
+      const msg: string = err instanceof Error ? err.message : '发布失败';
+      showSnackbar(msg);
+    } finally {
+      setIsPublishing(false);
+    }
+  }, [attachments, content, description, router, showSnackbar, sync, title]);
   const titleFont = theme.fonts.titleMedium;
   return (
     <KeyboardAvoidingView
@@ -244,7 +290,15 @@ export default function ComposeScreen(): React.JSX.Element {
             onPress={() => Alert.alert('提示', '设置功能开发中')}
             accessibilityLabel="设置"
           />
-          <Button mode="contained" onPress={executePublish} compact style={{ marginRight: 8 }}>
+          <Button
+            mode="contained"
+            loading={isPublishing}
+            disabled={
+              isPublishing || showUploadProgress || (content.trim().length === 0 && !hasDoneAttachment)
+            }
+            onPress={() => void handlePublish()}
+            style={{ marginRight: 8 }}
+          >
             发布
           </Button>
         </View>
