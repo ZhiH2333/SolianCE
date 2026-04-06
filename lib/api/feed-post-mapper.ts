@@ -79,6 +79,88 @@ function resolveMediaUrl(raw: unknown): string | undefined {
   return `${API_BASE_URL}/drive/files/${raw}`;
 }
 
+/** 与 content-api `resolvePictureUrlFromFileLike`、聊天头像解析一致 */
+function resolvePictureUrlFromFileLike(blob: unknown): string {
+  const avatarRoot: Record<string, unknown> | null = readRecord(blob);
+  if (!avatarRoot) {
+    return '';
+  }
+  const avatarUrlValue: unknown = avatarRoot.url ?? null;
+  const avatarUrlRoot: Record<string, unknown> | null = readRecord(avatarUrlValue);
+  const avatarUrlFromValue: string = ((): string => {
+    if (typeof avatarUrlValue === 'string' && avatarUrlValue.length > 0) {
+      return avatarUrlValue;
+    }
+    const urlRecord: Record<string, unknown> | null = readRecord(avatarUrlValue);
+    if (urlRecord) {
+      return pickString(urlRecord, ['public_url', 'publicUrl', 'url', 'download_url', 'downloadUrl']);
+    }
+    return '';
+  })();
+  const avatarUrlFromMeta: string = ((): string => {
+    const fileMeta: Record<string, unknown> | null = readRecord(avatarRoot.file_meta ?? null);
+    const userMeta: Record<string, unknown> | null = readRecord(avatarRoot.user_meta ?? null);
+    return (
+      pickString(fileMeta ?? {}, ['public_url', 'publicUrl', 'url', 'download_url', 'downloadUrl']) ||
+      pickString(userMeta ?? {}, ['public_url', 'publicUrl', 'url', 'download_url', 'downloadUrl']) ||
+      ''
+    );
+  })();
+  const fileId: string = pickString(avatarRoot, ['id', 'hash']);
+  const avatarUrlFromId: string = fileId.length > 0 ? (resolveMediaUrl(fileId) ?? '') : '';
+  return (
+    pickString(avatarRoot, ['public_url', 'publicUrl', 'url', 'download_url', 'downloadUrl']) ||
+    pickString(avatarUrlRoot ?? {}, ['public_url', 'publicUrl', 'url', 'download_url', 'downloadUrl']) ||
+    avatarUrlFromMeta ||
+    avatarUrlFromValue ||
+    avatarUrlFromId ||
+    ''
+  );
+}
+
+/** 与 content-api `resolvePortraitFromAccountRecord` 一致，用于帖子/评论 publisher */
+function resolvePortraitFromPublisherRecord(account: Record<string, unknown> | null): string {
+  if (!account) {
+    return '';
+  }
+  const accountProfile: Record<string, unknown> | null = readRecord(account.profile ?? null);
+  const avatarObj: Record<string, unknown> | null =
+    readRecord(account.avatar) ??
+    readRecord(account.picture) ??
+    readRecord(account.profile_picture) ??
+    readRecord(account.profilePicture) ??
+    readRecord(accountProfile?.avatar as unknown) ??
+    readRecord(accountProfile?.picture as unknown) ??
+    readRecord(accountProfile?.profile_picture as unknown) ??
+    readRecord(accountProfile?.profilePicture as unknown) ??
+    null;
+  const fromFileLike: string =
+    resolvePictureUrlFromFileLike(account.avatar) ||
+    resolvePictureUrlFromFileLike(account.picture) ||
+    resolvePictureUrlFromFileLike(accountProfile?.picture) ||
+    resolvePictureUrlFromFileLike(accountProfile?.avatar) ||
+    '';
+  if (fromFileLike.length > 0) {
+    return fromFileLike;
+  }
+  const direct: string =
+    pickString(account, ['avatar', 'picture', 'icon', 'photo']) ||
+    pickString(accountProfile ?? {}, ['avatar', 'picture', 'icon', 'photo']) ||
+    pickString(avatarObj ?? {}, ['public_url', 'publicUrl', 'url', 'download_url', 'downloadUrl']) ||
+    '';
+  if (direct.length > 0) {
+    return resolveMediaUrl(direct) ?? '';
+  }
+  const fallbackId: string =
+    pickString(avatarObj ?? {}, ['id', 'hash']) ||
+    pickString(account, ['avatar_id', 'avatarId', 'picture_id', 'pictureId']) ||
+    pickString(accountProfile ?? {}, ['avatar_id', 'avatarId', 'picture_id', 'pictureId']);
+  if (fallbackId.length === 0) {
+    return '';
+  }
+  return resolveMediaUrl(fallbackId) ?? '';
+}
+
 function mapPublisher(author: Record<string, unknown> | null): FeedPostAuthor {
   if (!author) {
     return { name: '未知用户', handle: '@unknown', avatar: '' };
@@ -87,14 +169,7 @@ function mapPublisher(author: Record<string, unknown> | null): FeedPostAuthor {
   const nick: string = pickString(author, ['nick', 'nickname', 'display_name', 'displayName']);
   const name: string = nick.length > 0 ? nick : uname.length > 0 ? uname : '用户';
   const handle: string = uname.length > 0 ? `@${uname}` : '@user';
-  let avatar: string = pickString(author, ['avatar', 'pfp', 'profile_picture', 'profilePicture']);
-  const avatarFile = readRecord(author.avatar as unknown);
-  if (avatarFile) {
-    avatar =
-      pickString(avatarFile, ['public_url', 'publicUrl', 'url', 'direct_url', 'directUrl']) ||
-      resolveMediaUrl(pickString(avatarFile, ['id'])) ||
-      avatar;
-  }
+  let avatar: string = resolvePortraitFromPublisherRecord(author);
   if (avatar.length > 0 && !avatar.startsWith('http')) {
     avatar = resolveMediaUrl(avatar) ?? avatar;
   }
@@ -171,7 +246,10 @@ export function mapJsonToFeedPost(raw: unknown): FeedPost | null {
   if (!id) {
     return null;
   }
-  const publisher = readRecord(root.publisher as unknown);
+  const publisher: Record<string, unknown> | null =
+    readRecord(root.publisher as unknown) ??
+    readRecord(root.account as unknown) ??
+    readRecord(root.author as unknown);
   const author: FeedPostAuthor = mapPublisher(publisher);
   const contentType: number = pickNumber(root, ['content_type', 'contentType']);
   let content: string = pickString(root, ['content', 'text', 'body']);
@@ -261,7 +339,10 @@ export function mapJsonToFeedComment(raw: unknown, parentPostId: string): FeedCo
   if (!id) {
     return null;
   }
-  const publisher = readRecord(root.publisher as unknown);
+  const publisher: Record<string, unknown> | null =
+    readRecord(root.publisher as unknown) ??
+    readRecord(root.account as unknown) ??
+    readRecord(root.author as unknown);
   const contentType: number = pickNumber(root, ['content_type', 'contentType']);
   let content: string = pickString(root, ['content', 'text']);
   if (contentType === 1 && content.length > 0) {

@@ -176,7 +176,7 @@ export default function ExploreScreen() {
             label: '动态',
             onPress: () => {
               setIsFabOpen(false);
-              Alert.alert('新建动态', '功能开发中');
+              router.push('/compose');
             },
             style: { backgroundColor: theme.colors.secondaryContainer },
             color: theme.colors.onSecondaryContainer,

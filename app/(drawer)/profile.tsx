@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Alert, ScrollView, View } from 'react-native';
 import { DrawerActions } from '@react-navigation/native';
 import { useNavigation } from '@react-navigation/native';
+import { useRouter } from 'expo-router';
 import { Appbar, Card, Divider, List, Text, TouchableRipple, useTheme } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -19,12 +20,6 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  {
-    icon: 'face-man-outline',
-    title: '发布者',
-    subtitle: '管理你的发布者身份',
-    onPress: () => Alert.alert('发布者', '功能开发中'),
-  },
   {
     icon: 'account-group-outline',
     title: '好友',
@@ -252,6 +247,7 @@ export default function ProfileScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
+  const router = useRouter();
   const sync = useContentApiSync();
   const [account, setAccount] = useState<AccountMeDto | null>(null);
 
@@ -302,6 +298,16 @@ export default function ProfileScreen() {
         <ProfileCard user={account} isOnline={false} />
 
         <View style={{ marginTop: 8 }}>
+          <List.Item
+            title="发布者管理"
+            description="管理你的发布者与创作者中心"
+            titleStyle={{ color: theme.colors.onSurface }}
+            descriptionStyle={{ color: theme.colors.onSurfaceVariant }}
+            left={(props) => <List.Icon {...props} icon="account-edit" color={theme.colors.onSurfaceVariant} />}
+            right={(props) => <List.Icon {...props} icon="chevron-right" color={theme.colors.outline} />}
+            onPress={() => router.push('/creator' as any)}
+          />
+          <Divider style={{ marginLeft: 64 }} />
           {NAV_ITEMS.map((item, index) => (
             <View key={item.title}>
               <NavListItem item={item} />
