@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { FlatList, Image, Pressable, ScrollView, View } from 'react-native';
+import { FlatList, Image, Pressable, View, Linking } from 'react-native';
 import {
   Appbar,
   Checkbox,
@@ -10,6 +10,7 @@ import {
   Menu,
   Modal,
   Portal,
+  ProgressBar,
   Text,
   useTheme,
   Checkbox as RNPCheckbox,
@@ -18,14 +19,18 @@ import { DrawerActions } from '@react-navigation/native';
 import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import {
   type DriveFile,
-  getIndexedFiles,
+  type DriveFolder,
   getUnindexedFiles,
   getQuota,
+  getUsage,
   deleteFile,
   batchDeleteFiles,
   removeIndex,
+  getFolderContents,
+  uploadToIndex,
   type DriveQuota,
 } from '@/lib/drive';
 import { useContentApiSync } from '@/lib/hooks/use-content-api-sync';
@@ -69,7 +74,7 @@ interface FileItemProps {
   isSelected: boolean;
   onSelect: (id: string) => void;
   onPress: (file: DriveFile) => void;
-  onMorePress: (file: DriveFile) => void;
+  onMorePress: (file: DriveFile, event: any) => void;
   selected: boolean;
   theme: any;
 }
@@ -118,7 +123,7 @@ function FileListItem({ file, isSelected, onSelect, onPress, onMorePress, theme 
       <IconButton
         icon="dots-vertical"
         size={20}
-        onPress={() => onMorePress(file)}
+        onPress={(e) => onMorePress(file, e)}
         iconColor={theme.colors.onSurfaceVariant}
       />
     </Pressable>
@@ -140,19 +145,19 @@ function FileGridItem({ file, isSelected, onSelect, onPress, onMorePress, theme 
     >
       <View style={{ position: 'relative' }}>
         {file.type === 'image' && file.url ? (
-          <Image source={{ uri: file.url }} style={{ width: '100%', aspectRatio: 1, borderRadius: 12 }} />
+          <Image source={{ uri: file.url }} style={{ width: '100%', aspectRatio: 1, borderRadius: 8 }} />
         ) : (
           <View style={{
             width: '100%',
             aspectRatio: 1,
-            borderRadius: 12,
+            borderRadius: 8,
             backgroundColor: theme.colors.surfaceVariant,
             alignItems: 'center',
             justifyContent: 'center',
           }}>
             <MaterialCommunityIcons
               name={getFileIcon(file.mimeType, file.type) as any}
-              size={48}
+              size={36}
               color={theme.colors.onSurfaceVariant}
             />
           </View>
@@ -174,6 +179,85 @@ function FileGridItem({ file, isSelected, onSelect, onPress, onMorePress, theme 
   );
 }
 
+interface FolderItemProps {
+  folder: DriveFolder;
+  onPress: (folder: DriveFolder) => void;
+  theme: any;
+}
+
+function FolderListItem({ folder, onPress, theme }: FolderItemProps) {
+  return (
+    <Pressable
+      onPress={() => onPress(folder)}
+      style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 10,
+        paddingHorizontal: 8,
+        borderRadius: 8,
+      }}
+    >
+      <View style={{
+        width: 48,
+        height: 48,
+        borderRadius: 8,
+        backgroundColor: theme.colors.primaryContainer,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginRight: 12,
+      }}>
+        <MaterialCommunityIcons
+          name="folder"
+          size={24}
+          color={theme.colors.onPrimaryContainer}
+        />
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text variant="bodyMedium" numberOfLines={1} style={{ color: theme.colors.onSurface }}>
+          {folder.name}
+        </Text>
+        <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant, marginTop: 2 }}>
+          {formatDate(folder.createdAt || folder.updatedAt || '')}
+        </Text>
+      </View>
+    </Pressable>
+  );
+}
+
+function FolderGridItem({ folder, onPress, theme }: FolderItemProps) {
+  return (
+    <Pressable
+      onPress={() => onPress(folder)}
+      style={{
+        width: '48%',
+        marginBottom: 12,
+        borderRadius: 12,
+        padding: 8,
+      }}
+    >
+      <View style={{ alignItems: 'center', padding: 12 }}>
+        <View style={{
+          width: 64,
+          height: 64,
+          borderRadius: 12,
+          backgroundColor: theme.colors.primaryContainer,
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}>
+          <MaterialCommunityIcons
+            name="folder"
+            size={36}
+            color={theme.colors.onPrimaryContainer}
+          />
+        </View>
+        <Text variant="bodySmall" numberOfLines={1} style={{ color: theme.colors.onSurface, marginTop: 8 }}>
+          {folder.name}
+        </Text>
+      </View>
+    </Pressable>
+  );
+}
+
 interface QuotaModalProps {
   visible: boolean;
   onDismiss: () => void;
@@ -183,7 +267,8 @@ interface QuotaModalProps {
 }
 
 function QuotaModal({ visible, onDismiss, quota, loading, theme }: QuotaModalProps) {
-  const usedPercent = quota ? Math.round((quota.used / quota.total) * 100) : 0;
+  const usedPercent = quota ? (quota.total > 0 ? Math.round((quota.used / quota.total) * 100) : 0) : 0;
+  const usedFilesPercent = quota ? (quota.totalFiles > 0 ? Math.round((quota.usedFiles / quota.totalFiles) * 100) : 0) : 0;
   return (
     <Portal>
       <Modal visible={visible} onDismiss={onDismiss} contentContainerStyle={{
@@ -199,7 +284,8 @@ function QuotaModal({ visible, onDismiss, quota, loading, theme }: QuotaModalPro
           <Text style={{ color: theme.colors.onSurfaceVariant }}>加载中...</Text>
         ) : quota ? (
           <>
-            <View style={{ marginBottom: 16 }}>
+            <View style={{ marginBottom: 20 }}>
+              <Text variant="labelMedium" style={{ color: theme.colors.primary, marginBottom: 8 }}>存储空间</Text>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
                 <Text style={{ color: theme.colors.onSurfaceVariant }}>已使用</Text>
                 <Text style={{ color: theme.colors.onSurface }}>{formatFileSize(quota.used)}</Text>
@@ -212,11 +298,19 @@ function QuotaModal({ visible, onDismiss, quota, loading, theme }: QuotaModalPro
                 <Text style={{ color: theme.colors.onSurface }}>{formatFileSize(quota.total)}</Text>
               </View>
             </View>
-            <Divider style={{ marginBottom: 16 }} />
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-              <View>
-                <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>文件数量</Text>
-                <Text variant="titleMedium" style={{ color: theme.colors.onSurface }}>{quota.fileCount}</Text>
+            <Divider style={{ marginBottom: 20 }} />
+            <View>
+              <Text variant="labelMedium" style={{ color: theme.colors.primary, marginBottom: 8 }}>文件数量</Text>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
+                <Text style={{ color: theme.colors.onSurfaceVariant }}>已使用</Text>
+                <Text style={{ color: theme.colors.onSurface }}>{quota.usedFiles} 个文件</Text>
+              </View>
+              <View style={{ height: 8, backgroundColor: theme.colors.surfaceVariant, borderRadius: 4, overflow: 'hidden' }}>
+                <View style={{ width: `${usedFilesPercent}%`, height: '100%', backgroundColor: theme.colors.tertiary }} />
+              </View>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 }}>
+                <Text style={{ color: theme.colors.onSurfaceVariant }}>配额上限</Text>
+                <Text style={{ color: theme.colors.onSurface }}>{quota.totalFiles} 个文件</Text>
               </View>
             </View>
           </>
@@ -259,10 +353,18 @@ export default function DriveScreen() {
 
   const [menuVisible, setMenuVisible] = useState(false);
   const [typeMenuVisible, setTypeMenuVisible] = useState(false);
+  const [sortMenuVisible, setSortMenuVisible] = useState(false);
   const [menuAnchor, setMenuAnchor] = useState<{ x: number; y: number; file: DriveFile } | null>(null);
   const [dialogType, setDialogType] = useState<'delete' | 'info' | null>(null);
   const [dialogFile, setDialogFile] = useState<DriveFile | null>(null);
   const [dialogVisible, setDialogVisible] = useState(false);
+
+  const [folders, setFolders] = useState<DriveFolder[]>([]);
+  const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
+  const [folderPath, setFolderPath] = useState<DriveFolder[]>([]);
+
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
 
   const loadFiles = useCallback(async (reset: boolean = false) => {
     if (!sync) return;
@@ -270,19 +372,27 @@ export default function DriveScreen() {
     setLoadError(null);
     try {
       const currentOffset = reset ? 0 : offset;
-      const fetchFn = tabIndex === 0 ? getIndexedFiles : getUnindexedFiles;
-      const result = await fetchFn(currentOffset, PAGE_SIZE);
-      const newFiles = reset ? result.items : [...files, ...result.items];
-      const sorted = sortFiles(newFiles, sortField, sortOrder);
-      setFiles(sorted);
-      setOffset(currentOffset + result.items.length);
-      setHasMore(result.items.length === PAGE_SIZE);
+      if (tabIndex === 0) {
+        const result = await getFolderContents(currentFolderId, currentOffset, PAGE_SIZE);
+        const sortedFiles = sortFiles(result.files, sortField, sortOrder);
+        setFolders(result.folders);
+        setFiles(sortedFiles);
+        setOffset(currentOffset + result.files.length);
+        setHasMore(result.files.length === PAGE_SIZE);
+      } else {
+        const result = await getUnindexedFiles(currentOffset, PAGE_SIZE);
+        const newFiles = reset ? result.items : [...files, ...result.items];
+        const sorted = sortFiles(newFiles, sortField, sortOrder);
+        setFiles(sorted);
+        setOffset(currentOffset + result.items.length);
+        setHasMore(result.items.length === PAGE_SIZE);
+      }
     } catch (error) {
       setLoadError(error instanceof Error ? error.message : '加载失败');
     } finally {
       setLoading(false);
     }
-  }, [sync, tabIndex, offset, sortField, sortOrder]);
+  }, [sync, tabIndex, offset, sortField, sortOrder, currentFolderId, files]);
 
   const loadQuota = useCallback(async () => {
     if (!sync) return;
@@ -294,6 +404,59 @@ export default function DriveScreen() {
       setQuotaLoading(false);
     }
   }, [sync]);
+
+  const handleFolderPress = (folder: DriveFolder) => {
+    setFolderPath([...folderPath, { id: currentFolderId || '', name: currentFolderId ? folderPath[folderPath.length - 1]?.name || '根目录' : '根目录', path: '', parentId: null, createdAt: '', updatedAt: '' }]);
+    setCurrentFolderId(folder.id);
+    setOffset(0);
+    setFiles([]);
+    setFolders([]);
+    void loadFiles(true);
+  };
+
+  const handleGoBack = () => {
+    if (folderPath.length > 0) {
+      const newPath = [...folderPath];
+      const popped = newPath.pop();
+      setFolderPath(newPath);
+      setCurrentFolderId(popped?.id || null);
+      setOffset(0);
+      setFiles([]);
+      setFolders([]);
+      void loadFiles(true);
+    } else {
+      setCurrentFolderId(null);
+      setOffset(0);
+      setFiles([]);
+      setFolders([]);
+      void loadFiles(true);
+    }
+  };
+
+  const handleUpload = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.All,
+        allowsEditing: false,
+        quality: 1,
+      });
+      if (result.canceled || !result.assets || result.assets.length === 0) return;
+      const asset = result.assets[0];
+      setUploading(true);
+      setUploadProgress(0);
+      await uploadToIndex(
+        { uri: asset.uri, name: asset.fileName || 'file', type: asset.mimeType || 'application/octet-stream' },
+        currentFolderId,
+        (p) => setUploadProgress(p)
+      );
+      void loadFiles(true);
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : '上传失败');
+    } finally {
+      setUploading(false);
+      setUploadProgress(0);
+    }
+  };
 
   const sortFiles = (items: DriveFile[], field: SortField, order: SortOrder): DriveFile[] => {
     const sorted = [...items].sort((a, b) => {
@@ -313,16 +476,32 @@ export default function DriveScreen() {
   };
 
   useEffect(() => {
-    console.log('[Drive] useEffect triggered, tabIndex:', tabIndex, 'sortField:', sortField, 'sortOrder:', sortOrder);
+    if (!sync) return;
     setFiles([]);
+    setFolders([]);
     setOffset(0);
     setSelectedIds(new Set());
     setSelectionMode(false);
-    void loadFiles(true);
+    loadFiles(true);
     if (tabIndex === 0) {
-      void loadQuota();
+      loadQuota();
     }
   }, [tabIndex, sortField, sortOrder]);
+
+  useEffect(() => {
+    if (!sync) return;
+    setFiles([]);
+    setFolders([]);
+    setOffset(0);
+    loadFiles(true);
+  }, [currentFolderId]);
+
+  useEffect(() => {
+    if (!sync) return;
+    if (tabIndex === 0) {
+      loadQuota();
+    }
+  }, [tabIndex, sync]);
 
   const handleSelect = (id: string) => {
     if (!selectionMode) {
@@ -359,7 +538,13 @@ export default function DriveScreen() {
     setMenuVisible(false);
     if (!menuAnchor) return;
     const file = menuAnchor.file;
-    if (action === 'delete') {
+    if (action === 'download') {
+      try {
+        await Linking.openURL(file.url);
+      } catch (error) {
+        setLoadError(error instanceof Error ? error.message : '下载失败');
+      }
+    } else if (action === 'delete') {
       setDialogFile(file);
       setDialogType('delete');
       setDialogVisible(true);
@@ -393,40 +578,44 @@ export default function DriveScreen() {
     }
   };
 
-  const renderItem = ({ item }: { item: DriveFile }) => {
+  const renderItem = ({ item, index }: { item: DriveFile | DriveFolder; index: number }) => {
+    if (index < folders.length) {
+      const folder = folders[index] as DriveFolder;
+      if (viewMode === 'grid') {
+        return <FolderGridItem folder={folder} onPress={handleFolderPress} theme={theme} />;
+      }
+      return <FolderListItem folder={folder} onPress={handleFolderPress} theme={theme} />;
+    }
+    const file = item as DriveFile;
     if (viewMode === 'grid') {
       return (
         <FileGridItem
-          file={item}
+          file={file}
           viewMode={viewMode}
-          isSelected={selectedIds.has(item.id)}
+          isSelected={selectedIds.has(file.id)}
           onSelect={handleSelect}
           onPress={handleFilePress}
-          onMorePress={(f) => {
-            // @ts-ignore
-            handleMorePress(f, { nativeEvent: { pageX: 0, pageY: 0 } });
-          }}
-          selected={selectedIds.has(item.id)}
+          onMorePress={(f, e) => handleMorePress(f, e)}
+          selected={selectedIds.has(file.id)}
           theme={theme}
         />
       );
     }
     return (
       <FileListItem
-        file={item}
+        file={file}
         viewMode={viewMode}
-        isSelected={selectedIds.has(item.id)}
+        isSelected={selectedIds.has(file.id)}
         onSelect={handleSelect}
         onPress={handleFilePress}
-        onMorePress={(f) => {
-          // @ts-ignore
-          handleMorePress(f, { nativeEvent: { pageX: 0, pageY: 0 } });
-        }}
-        selected={selectedIds.has(item.id)}
+        onMorePress={(f, e) => handleMorePress(f, e)}
+        selected={selectedIds.has(file.id)}
         theme={theme}
       />
     );
   };
+
+  const allItems = [...folders, ...files];
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
@@ -457,13 +646,19 @@ export default function DriveScreen() {
           </>
         ) : (
           <>
-            <Appbar.Action
-              icon="menu"
-              iconColor={theme.colors.onSurface}
-              onPress={() => navigation.dispatch(DrawerActions.openDrawer())}
-            />
+            {currentFolderId || folderPath.length > 0 ? (
+              <Appbar.BackAction
+                onPress={handleGoBack}
+              />
+            ) : (
+              <Appbar.Action
+                icon="menu"
+                iconColor={theme.colors.onSurface}
+                onPress={() => navigation.dispatch(DrawerActions.openDrawer())}
+              />
+            )}
             <Appbar.Content
-              title="云盘"
+              title={currentFolderId ? folderPath[folderPath.length - 1]?.name || '文件夹' : '云盘'}
               titleStyle={{ color: theme.colors.onSurface, fontWeight: '600', textAlign: 'center' }}
             />
             <Appbar.Action
@@ -474,6 +669,15 @@ export default function DriveScreen() {
           </>
         )}
       </Appbar.Header>
+
+      {uploading && (
+        <View style={{ paddingHorizontal: 16, paddingVertical: 8 }}>
+          <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant, marginBottom: 4 }}>
+            上传中... {uploadProgress}%
+          </Text>
+          <ProgressBar progress={uploadProgress / 100} />
+        </View>
+      )}
 
       <View style={{ paddingHorizontal: 16, paddingVertical: 12 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -509,6 +713,15 @@ export default function DriveScreen() {
             />
           </Menu>
           <View style={{ flex: 1 }} />
+          {tabIndex === 0 && (
+            <IconButton
+              icon="upload"
+              size={20}
+              onPress={handleUpload}
+              iconColor={theme.colors.onSurfaceVariant}
+              disabled={uploading}
+            />
+          )}
           <IconButton
             icon={viewMode === 'list' ? 'view-grid' : 'view-list'}
             size={20}
@@ -516,13 +729,13 @@ export default function DriveScreen() {
             iconColor={theme.colors.onSurfaceVariant}
           />
           <Menu
-            visible={false}
-            onDismiss={() => {}}
+            visible={sortMenuVisible}
+            onDismiss={() => setSortMenuVisible(false)}
             anchor={
               <IconButton
                 icon="sort"
                 size={20}
-                onPress={() => {}}
+                onPress={() => setSortMenuVisible(true)}
                 iconColor={theme.colors.onSurfaceVariant}
               />
             }
@@ -566,15 +779,12 @@ export default function DriveScreen() {
       )}
 
       <FlatList
-        data={files}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => {
-          console.log('[Drive] Rendering item:', item.id, item.name);
-          return renderItem({ item });
-        }}
+        data={allItems}
+        keyExtractor={(item, index) => index < folders.length ? `folder-${(item as DriveFolder).id}` : `file-${(item as DriveFile).id}`}
+        renderItem={({ item, index }) => renderItem({ item, index })}
         numColumns={viewMode === 'grid' ? 2 : 1}
         key={viewMode}
-        contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + 80, flexGrow: files.length === 0 ? 0 : 1 }}
+        contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + 80, flexGrow: allItems.length === 0 ? 0 : 1 }}
         onEndReached={loadMore}
         onEndReachedThreshold={0.5}
         ListEmptyComponent={
@@ -603,6 +813,11 @@ export default function DriveScreen() {
           onDismiss={() => setMenuVisible(false)}
           anchor={{ x: menuAnchor.x, y: menuAnchor.y }}
         >
+          <Menu.Item
+            title="下载"
+            leadingIcon="download"
+            onPress={() => handleMenuAction('download')}
+          />
           <Menu.Item
             title="查看详情"
             leadingIcon="information"

@@ -129,10 +129,8 @@ export function detectFileType(mimeType: string): DriveFile['type'] {
 }
 
 function mapPayloadToDriveFile(data: unknown, fallbackId?: string): DriveFile {
-  console.log('[Drive API] mapPayloadToDriveFile input:', JSON.stringify(data).slice(0, 200));
   const row: Record<string, unknown> | null = readRecord(data);
   if (!row) {
-    console.log('[Drive API] mapPayloadToDriveFile: row is null');
     throw new Error('无效的文件响应');
   }
   const nested: Record<string, unknown> = readRecord(row.data) ?? row;
@@ -140,9 +138,7 @@ function mapPayloadToDriveFile(data: unknown, fallbackId?: string): DriveFile {
     pickString(nested, ['id', 'hash', 'object_id', 'objectId']) ||
     pickString(row, ['id', 'hash', 'object_id', 'objectId']) ||
     (fallbackId ?? '');
-  console.log('[Drive API] mapPayloadToDriveFile: id =', id);
   if (id.length === 0) {
-    console.log('[Drive API] mapPayloadToDriveFile: id is empty');
     throw new Error('无效的文件响应');
   }
   const name: string =
@@ -158,8 +154,144 @@ function mapPayloadToDriveFile(data: unknown, fallbackId?: string): DriveFile {
   const type: DriveFile['type'] = detectFileType(mimeType);
   const createdAt: string = pickString(nested, ['created_at', 'createdAt']) || pickString(row, ['created_at', 'createdAt']) || '';
   const updatedAt: string = pickString(nested, ['updated_at', 'updatedAt']) || pickString(row, ['updated_at', 'updatedAt']) || '';
-  console.log('[Drive API] mapPayloadToDriveFile: returning', { id, name, mimeType, size, type });
   return { id, url: url || `${API_BASE_URL}/drive/files/${id}`, name, mimeType, size, type, createdAt, updatedAt };
+}
+
+export interface DriveFolder {
+  id: string;
+  name: string;
+  path: string;
+  parentId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+function mapPayloadToDriveFolder(data: unknown): DriveFolder {
+  const row: Record<string, unknown> | null = readRecord(data);
+  if (!row) {
+    throw new Error('无效的文件夹响应');
+  }
+  const id: string = pickString(row, ['id', 'hash', 'folder_id', 'folderId']) || '';
+  if (id.length === 0) {
+    throw new Error('无效的文件夹响应');
+  }
+  const name: string = pickString(row, ['name', 'title', 'folder_name', 'folderName']) || '文件夹';
+  const path: string = pickString(row, ['path', 'folder_path', 'folderPath']) || '';
+  const parentId: string = pickString(row, ['parent_id', 'parentId', 'parent']) || '';
+  const createdAt: string = pickString(row, ['created_at', 'createdAt']) || '';
+  const updatedAt: string = pickString(row, ['updated_at', 'updatedAt']) || '';
+  return { id, name, path, parentId: parentId || null, createdAt, updatedAt };
+}
+
+export async function getFolderContents(
+  folderId: string | null,
+  offset: number = 0,
+  take: number = 50,
+): Promise<{ folders: DriveFolder[]; files: DriveFile[]; totalCount: number | null }> {
+  const before: TokenPair = await loadAuthorizedTokenPair();
+  const params: URLSearchParams = new URLSearchParams({
+    offset: String(offset),
+    take: String(take),
+  });
+  const path = folderId ? `/drive/index/browse/${encodeURIComponent(folderId)}?${params.toString()}` : `/drive/index/browse?${params.toString()}`;
+  const { data, tokenPair } = await performAuthorizedFetch(path, { method: 'GET' }, before);
+  await persistTokenIfRefreshed(before, tokenPair);
+  const root = data as Record<string, unknown>;
+  let folders: DriveFolder[] = [];
+  let files: DriveFile[] = [];
+  const foldersRaw = root.folders;
+  const filesRaw = root.files;
+  if (Array.isArray(foldersRaw)) {
+    for (const f of foldersRaw) {
+      if (typeof f === 'string') {
+        folders.push({
+          id: f,
+          name: f,
+          path: '',
+          parentId: folderId,
+          createdAt: '',
+          updatedAt: '',
+        });
+      } else if (f && typeof f === 'object') {
+        try { folders.push(mapPayloadToDriveFolder(f)); } catch {}
+      }
+    }
+  }
+  if (Array.isArray(filesRaw)) {
+    for (const f of filesRaw) {
+      if (f && typeof f === 'object') {
+        try { files.push(mapPayloadToDriveFile(f)); } catch {}
+      }
+    }
+  }
+  const totalCount = typeof root.total_count === 'number' ? root.total_count : (folders.length + files.length);
+  return { folders, files, totalCount };
+}
+
+export async function getIndexedFiles(
+  offset: number = 0,
+  take: number = 50,
+): Promise<{ items: DriveFile[]; totalCount: number | null }> {
+  const before: TokenPair = await loadAuthorizedTokenPair();
+  const params: URLSearchParams = new URLSearchParams({
+    offset: String(offset),
+    take: String(take),
+  });
+  const { data, tokenPair } = await performAuthorizedFetch(
+    `/drive/index/browse?${params.toString()}`,
+    { method: 'GET' },
+    before,
+  );
+  await persistTokenIfRefreshed(before, tokenPair);
+  const root = data;
+  let itemsRaw: unknown[] = [];
+  if (Array.isArray(root)) {
+    itemsRaw = root;
+  } else if (root && typeof root === 'object') {
+    if (Array.isArray((root as any).items)) {
+      itemsRaw = (root as any).items;
+    } else if (Array.isArray((root as any).data)) {
+      itemsRaw = (root as any).data;
+    } else if (Array.isArray((root as any).files)) {
+      itemsRaw = (root as any).files;
+    } else if (Array.isArray((root as any).list)) {
+      itemsRaw = (root as any).list;
+    }
+  }
+  const folders: DriveFolder[] = [];
+  const items: DriveFile[] = [];
+  for (const raw of itemsRaw) {
+    try {
+      const itemRecord = raw as Record<string, unknown>;
+      const typeValue = itemRecord.type as string | undefined;
+      const isFolder = typeValue === 'folder' || typeValue === 'dir' || typeValue === 'directory';
+      if (isFolder) {
+        folders.push(mapPayloadToDriveFolder(raw));
+      } else {
+        items.push(mapPayloadToDriveFile(raw));
+      }
+    } catch {}
+  }
+  return { items, totalCount: items.length > 0 ? items.length + folders.length : null };
+}
+
+export async function uploadToIndex(
+  file: { uri: string; name: string; type: string },
+  folderId: string | null,
+  onProgress?: (percent: number) => void,
+): Promise<DriveFile> {
+  const baseFile = await uploadFile(file, onProgress);
+  const before: TokenPair = await loadAuthorizedTokenPair();
+  const body: Record<string, unknown> = {
+    file_id: baseFile.id,
+    folder_id: folderId,
+  };
+  const { data, tokenPair } = await performAuthorizedFetch('/drive/index/add', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  }, before);
+  await persistTokenIfRefreshed(before, tokenPair);
+  return mapPayloadToDriveFile(data);
 }
 
 function isAccessTokenExpired(expiresAt: string | null): boolean {
@@ -363,21 +495,45 @@ export interface DriveQuota {
   used: number;
   total: number;
   fileCount: number;
+  usedFiles: number;
+  totalFiles: number;
 }
 
 function mapJsonToQuota(data: unknown): DriveQuota {
+  if (Array.isArray(data)) {
+    let totalUsed = 0;
+    let totalFiles = 0;
+    for (const pool of data) {
+      const poolRecord = pool as Record<string, unknown>;
+      totalUsed += typeof poolRecord.usage_bytes === 'number' ? poolRecord.usage_bytes : 0;
+      totalFiles += typeof poolRecord.file_count === 'number' ? poolRecord.file_count : 0;
+    }
+    return { used: totalUsed, total: 0, fileCount: totalFiles, usedFiles: totalFiles, totalFiles: 0 };
+  }
   const root: Record<string, unknown> | null = readRecord(data);
-  const used: number = pickNumberField(root ?? {}, ['used', 'used_bytes', 'usedBytes']) || 0;
-  const total: number = pickNumberField(root ?? {}, ['total', 'quota', 'limit', 'total_bytes', 'totalBytes']) || 0;
-  const fileCount: number = pickNumberField(root ?? {}, ['count', 'file_count', 'fileCount', 'files']) || 0;
-  return { used, total, fileCount };
+  if (!root) {
+    return { used: 0, total: 0, fileCount: 0, usedFiles: 0, totalFiles: 0 };
+  }
+  const basedQuota = pickNumberField(root, ['based_quota', 'basedQuota', 'quota']) || 0;
+  const extraQuota = pickNumberField(root, ['extra_quota', 'extraQuota']) || 0;
+  const totalQuota = pickNumberField(root, ['total_quota', 'totalQuota']) || (basedQuota + extraQuota);
+  return { used: 0, total: totalQuota * 1024 * 1024, fileCount: 0, usedFiles: 0, totalFiles: 0 };
 }
 
 export async function getQuota(): Promise<DriveQuota> {
   const before: TokenPair = await loadAuthorizedTokenPair();
-  const { data, tokenPair } = await performAuthorizedFetch('/drive/billing/quota', { method: 'GET' }, before);
-  await persistTokenIfRefreshed(before, tokenPair);
-  return mapJsonToQuota(data);
+  const { data: quotaData, tokenPair: quotaToken } = await performAuthorizedFetch('/drive/billing/quota', { method: 'GET' }, before);
+  const { data: usageData } = await performAuthorizedFetch('/drive/billing/usage', { method: 'GET' }, before);
+  await persistTokenIfRefreshed(before, quotaToken);
+  const quota = mapJsonToQuota(quotaData);
+  const usage = mapJsonToQuota(usageData);
+  return {
+    used: usage.used,
+    total: quota.total,
+    fileCount: usage.fileCount,
+    usedFiles: usage.fileCount,
+    totalFiles: quota.total > 0 ? 999999 : 0,
+  };
 }
 
 export async function getUsage(): Promise<DriveQuota> {
@@ -385,51 +541,6 @@ export async function getUsage(): Promise<DriveQuota> {
   const { data, tokenPair } = await performAuthorizedFetch('/drive/billing/usage', { method: 'GET' }, before);
   await persistTokenIfRefreshed(before, tokenPair);
   return mapJsonToQuota(data);
-}
-
-export async function getIndexedFiles(
-  offset: number = 0,
-  take: number = 20,
-): Promise<{ items: DriveFile[]; totalCount: number | null }> {
-  const before: TokenPair = await loadAuthorizedTokenPair();
-  const params: URLSearchParams = new URLSearchParams({
-    offset: String(offset),
-    take: String(take),
-  });
-  const { data, tokenPair } = await performAuthorizedFetch(
-    `/drive/index/browse?${params.toString()}`,
-    { method: 'GET' },
-    before,
-  );
-  await persistTokenIfRefreshed(before, tokenPair);
-  console.log('[Drive API] getIndexedFiles response:', JSON.stringify(data).slice(0, 1000));
-  const root = data;
-  let itemsRaw: unknown[] = [];
-  if (Array.isArray(root)) {
-    itemsRaw = root;
-  } else if (root && typeof root === 'object') {
-    if (Array.isArray((root as any).items)) {
-      itemsRaw = (root as any).items;
-    } else if (Array.isArray((root as any).data)) {
-      itemsRaw = (root as any).data;
-    } else if (Array.isArray((root as any).files)) {
-      itemsRaw = (root as any).files;
-    } else if (Array.isArray((root as any).list)) {
-      itemsRaw = (root as any).list;
-    }
-  }
-  console.log('[Drive API] itemsRaw:', itemsRaw.length);
-  const items: DriveFile[] = [];
-  for (const raw of itemsRaw) {
-    try {
-      const file = mapPayloadToDriveFile(raw);
-      console.log('[Drive API] mapped file:', file.id, file.name);
-      items.push(file);
-    } catch (e) {
-      console.log('[Drive API] Failed to map file:', e);
-    }
-  }
-  return { items, totalCount: items.length > 0 ? items.length : null };
 }
 
 export async function getUnindexedFiles(
@@ -447,7 +558,6 @@ export async function getUnindexedFiles(
     before,
   );
   await persistTokenIfRefreshed(before, tokenPair);
-  console.log('[Drive API] getUnindexedFiles response:', JSON.stringify(data).slice(0, 1000));
   const root = data;
   let itemsRaw: unknown[] = [];
   if (Array.isArray(root)) {
@@ -461,16 +571,11 @@ export async function getUnindexedFiles(
       itemsRaw = (root as any).files;
     }
   }
-  console.log('[Drive API] unindexed itemsRaw:', itemsRaw.length);
   const items: DriveFile[] = [];
   for (const raw of itemsRaw) {
     try {
-      const file = mapPayloadToDriveFile(raw);
-      console.log('[Drive API] mapped unindexed file:', file.id, file.name);
-      items.push(file);
-    } catch (e) {
-      console.log('[Drive API] Failed to map unindexed file:', e);
-    }
+      items.push(mapPayloadToDriveFile(raw));
+    } catch {}
   }
   return { items, totalCount: items.length > 0 ? items.length : null };
 }
