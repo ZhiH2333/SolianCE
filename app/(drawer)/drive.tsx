@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
+import type { ReactNode } from 'react';
 import { FlatList, Image, Pressable, View, Linking } from 'react-native';
 import {
   Appbar,
@@ -267,11 +268,13 @@ interface QuotaModalProps {
 }
 
 function QuotaModal({ visible, onDismiss, quota, loading, theme }: QuotaModalProps) {
-  const usedPercent = quota ? (quota.total > 0 ? Math.round((quota.used / quota.total) * 100) : 0) : 0;
-  const usedFilesPercent = quota ? (quota.totalFiles > 0 ? Math.round((quota.usedFiles / quota.totalFiles) * 100) : 0) : 0;
+  const [selectedPoolIndex, setSelectedPoolIndex] = useState(0);
+  const [poolMenuVisible, setPoolMenuVisible] = useState(false);
+  const selectedPool = quota?.pools?.[selectedPoolIndex];
+  const usedPercent = quota && quota.total > 0 ? Math.round((quota.used / quota.total) * 100) : 0;
+  const usedPointsPercent = quota && quota.totalPoints > 0 ? Math.round((quota.usedPoints / quota.totalPoints) * 100) : 0;
   return (
-    <Portal>
-      <Modal visible={visible} onDismiss={onDismiss} contentContainerStyle={{
+    <Modal visible={visible} onDismiss={onDismiss} contentContainerStyle={{
         backgroundColor: theme.colors.surface,
         margin: 24,
         borderRadius: 16,
@@ -299,20 +302,82 @@ function QuotaModal({ visible, onDismiss, quota, loading, theme }: QuotaModalPro
               </View>
             </View>
             <Divider style={{ marginBottom: 20 }} />
-            <View>
+            <View style={{ marginBottom: 20 }}>
               <Text variant="labelMedium" style={{ color: theme.colors.primary, marginBottom: 8 }}>文件数量</Text>
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
                 <Text style={{ color: theme.colors.onSurfaceVariant }}>已使用</Text>
                 <Text style={{ color: theme.colors.onSurface }}>{quota.usedFiles} 个文件</Text>
               </View>
-              <View style={{ height: 8, backgroundColor: theme.colors.surfaceVariant, borderRadius: 4, overflow: 'hidden' }}>
-                <View style={{ width: `${usedFilesPercent}%`, height: '100%', backgroundColor: theme.colors.tertiary }} />
-              </View>
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 }}>
-                <Text style={{ color: theme.colors.onSurfaceVariant }}>配额上限</Text>
-                <Text style={{ color: theme.colors.onSurface }}>{quota.totalFiles} 个文件</Text>
-              </View>
+              {quota.totalFiles > 0 && (
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 }}>
+                  <Text style={{ color: theme.colors.onSurfaceVariant }}>上限</Text>
+                  <Text style={{ color: theme.colors.onSurface }}>{quota.totalFiles} 个</Text>
+                </View>
+              )}
             </View>
+            <Divider style={{ marginBottom: 20 }} />
+            <View style={{ marginBottom: 20 }}>
+              <Text variant="labelMedium" style={{ color: theme.colors.primary, marginBottom: 8 }}>配额点</Text>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
+                <Text style={{ color: theme.colors.onSurfaceVariant }}>已使用</Text>
+                <Text style={{ color: theme.colors.onSurface }}>{quota.usedPoints.toLocaleString()}</Text>
+              </View>
+              {quota.totalPoints > 0 && (
+                <>
+                  <View style={{ height: 8, backgroundColor: theme.colors.surfaceVariant, borderRadius: 4, overflow: 'hidden' }}>
+                    <View style={{ width: `${usedPointsPercent}%`, height: '100%', backgroundColor: theme.colors.tertiary }} />
+                  </View>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 }}>
+                    <Text style={{ color: theme.colors.onSurfaceVariant }}>总配额点</Text>
+                    <Text style={{ color: theme.colors.onSurface }}>{quota.totalPoints.toLocaleString()}</Text>
+                  </View>
+                </>
+              )}
+            </View>
+            {quota.pools && quota.pools.length > 0 && (
+              <>
+                <Divider style={{ marginTop: 20, marginBottom: 20 }} />
+                <Text variant="labelMedium" style={{ color: theme.colors.primary, marginBottom: 8 }}>存储池</Text>
+                <Menu
+                  visible={poolMenuVisible}
+                  onDismiss={() => setPoolMenuVisible(false)}
+                  anchor={
+                    <Chip
+                      icon="chevron-down"
+                      onPress={() => setPoolMenuVisible(true)}
+                      style={{ backgroundColor: theme.colors.surfaceVariant, marginBottom: 12 }}
+                      textStyle={{ color: theme.colors.onSurfaceVariant }}
+                    >
+                      {selectedPool?.poolName || '选择存储池'}
+                    </Chip>
+                  }
+                >
+                  {quota.pools.map((pool, index) => (
+                    <Menu.Item
+                      key={pool.poolId}
+                      title={pool.poolName}
+                      leadingIcon={index === selectedPoolIndex ? 'check' : undefined}
+                      onPress={() => {
+                        setSelectedPoolIndex(index);
+                        setPoolMenuVisible(false);
+                      }}
+                    />
+                  ))}
+                </Menu>
+                {selectedPool && (
+                  <View style={{ marginTop: 8 }}>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+                      <Text style={{ color: theme.colors.onSurfaceVariant }}>已使用</Text>
+                      <Text style={{ color: theme.colors.onSurface }}>{formatFileSize(selectedPool.usageBytes)}</Text>
+                    </View>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                      <Text style={{ color: theme.colors.onSurfaceVariant }}>文件数</Text>
+                      <Text style={{ color: theme.colors.onSurface }}>{selectedPool.fileCount} 个</Text>
+                    </View>
+                  </View>
+                )}
+              </>
+            )}
           </>
         ) : (
           <Text style={{ color: theme.colors.onSurfaceVariant }}>无法获取配额信息</Text>
@@ -323,7 +388,6 @@ function QuotaModal({ visible, onDismiss, quota, loading, theme }: QuotaModalPro
           style={{ position: 'absolute', top: 8, right: 8 }}
         />
       </Modal>
-    </Portal>
   );
 }
 
@@ -368,6 +432,7 @@ export default function DriveScreen() {
 
   const loadFiles = useCallback(async (reset: boolean = false) => {
     if (!sync) return;
+    if (loading) return;
     setLoading(true);
     setLoadError(null);
     try {
@@ -381,9 +446,13 @@ export default function DriveScreen() {
         setHasMore(result.files.length === PAGE_SIZE);
       } else {
         const result = await getUnindexedFiles(currentOffset, PAGE_SIZE);
-        const newFiles = reset ? result.items : [...files, ...result.items];
-        const sorted = sortFiles(newFiles, sortField, sortOrder);
-        setFiles(sorted);
+        if (result.items.length === 0 && currentOffset === 0) {
+          setLoadError('暂无未索引文件');
+        }
+        setFiles(prev => {
+          const newFiles = reset ? result.items : [...prev, ...result.items];
+          return sortFiles(newFiles, sortField, sortOrder);
+        });
         setOffset(currentOffset + result.items.length);
         setHasMore(result.items.length === PAGE_SIZE);
       }
@@ -392,7 +461,7 @@ export default function DriveScreen() {
     } finally {
       setLoading(false);
     }
-  }, [sync, tabIndex, offset, sortField, sortOrder, currentFolderId, files]);
+  }, [sync, tabIndex, sortField, sortOrder, currentFolderId]);
 
   const loadQuota = useCallback(async () => {
     if (!sync) return;
@@ -406,30 +475,34 @@ export default function DriveScreen() {
   }, [sync]);
 
   const handleFolderPress = (folder: DriveFolder) => {
-    setFolderPath([...folderPath, { id: currentFolderId || '', name: currentFolderId ? folderPath[folderPath.length - 1]?.name || '根目录' : '根目录', path: '', parentId: null, createdAt: '', updatedAt: '' }]);
+    const newPath = folderPath.length > 0 ? [...folderPath] : [];
+    newPath.push({ id: currentFolderId || 'root', name: currentFolderId ? folderPath[folderPath.length - 1]?.name || '目录' : '根目录', path: '', parentId: null, createdAt: '', updatedAt: '' });
+    setFolderPath(newPath);
     setCurrentFolderId(folder.id);
     setOffset(0);
     setFiles([]);
     setFolders([]);
-    void loadFiles(true);
+    setLoadError(null);
   };
 
   const handleGoBack = () => {
     if (folderPath.length > 0) {
       const newPath = [...folderPath];
-      const popped = newPath.pop();
+      newPath.pop();
       setFolderPath(newPath);
-      setCurrentFolderId(popped?.id || null);
+      const prev = newPath[newPath.length - 1];
+      const newFolderId = prev?.id === 'root' || !prev ? null : prev?.id;
+      setCurrentFolderId(newFolderId);
       setOffset(0);
       setFiles([]);
       setFolders([]);
-      void loadFiles(true);
-    } else {
+      setLoadError(null);
+    } else if (currentFolderId) {
       setCurrentFolderId(null);
       setOffset(0);
       setFiles([]);
       setFolders([]);
-      void loadFiles(true);
+      setLoadError(null);
     }
   };
 
@@ -458,7 +531,7 @@ export default function DriveScreen() {
     }
   };
 
-  const sortFiles = (items: DriveFile[], field: SortField, order: SortOrder): DriveFile[] => {
+  const sortFiles = useCallback((items: DriveFile[], field: SortField, order: SortOrder): DriveFile[] => {
     const sorted = [...items].sort((a, b) => {
       let cmp = 0;
       if (field === 'name') {
@@ -473,7 +546,7 @@ export default function DriveScreen() {
       return order === 'asc' ? cmp : -cmp;
     });
     return sorted;
-  };
+  }, []);
 
   useEffect(() => {
     if (!sync) return;
@@ -482,26 +555,18 @@ export default function DriveScreen() {
     setOffset(0);
     setSelectedIds(new Set());
     setSelectionMode(false);
-    loadFiles(true);
-    if (tabIndex === 0) {
-      loadQuota();
-    }
-  }, [tabIndex, sortField, sortOrder]);
+    void loadFiles(true);
+  }, [sync]);
 
   useEffect(() => {
     if (!sync) return;
-    setFiles([]);
-    setFolders([]);
-    setOffset(0);
-    loadFiles(true);
-  }, [currentFolderId]);
+    void loadFiles(true);
+  }, [tabIndex, sortField, sortOrder, currentFolderId]);
 
   useEffect(() => {
-    if (!sync) return;
-    if (tabIndex === 0) {
-      loadQuota();
-    }
-  }, [tabIndex, sync]);
+    if (!sync || tabIndex !== 0) return;
+    void loadQuota();
+  }, [sync, tabIndex]);
 
   const handleSelect = (id: string) => {
     if (!selectionMode) {
@@ -616,6 +681,18 @@ export default function DriveScreen() {
   };
 
   const allItems = [...folders, ...files];
+
+  const DriveDialogDismiss = ({ onPress, children }: { onPress: () => void; children: ReactNode }) => {
+    return (
+      <Pressable onPress={onPress} style={{ padding: 8 }}>{children}</Pressable>
+    );
+  };
+
+  const DriveDialogConfirm = ({ onPress, children }: { onPress: () => void; children: ReactNode }) => {
+    return (
+      <Pressable onPress={onPress} style={{ padding: 8 }}>{children}</Pressable>
+    );
+  };
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
@@ -851,13 +928,13 @@ export default function DriveScreen() {
           ) : null}
         </Dialog.Content>
         <Dialog.Actions>
-          <DialogDismiss onPress={() => setDialogVisible(false)}>
+          <DriveDialogDismiss onPress={() => setDialogVisible(false)}>
             <Text>取消</Text>
-          </DialogDismiss>
+          </DriveDialogDismiss>
           {dialogType === 'delete' && (
-            <DialogConfirm onPress={confirmDelete}>
+            <DriveDialogConfirm onPress={confirmDelete}>
               <Text style={{ color: theme.colors.error }}>删除</Text>
-            </DialogConfirm>
+            </DriveDialogConfirm>
           )}
         </Dialog.Actions>
       </Dialog>
@@ -873,18 +950,4 @@ export default function DriveScreen() {
   );
 }
 
-function DialogDismiss({ onPress, children }: { onPress: () => void; children: React.ReactNode }) {
-  return (
-    <Pressable onPress={onPress} style={{ padding: 8 }}>
-      {children}
-    </Pressable>
-  );
-}
-
-function DialogConfirm({ onPress, children }: { onPress: () => void; children: React.ReactNode }) {
-  return (
-    <Pressable onPress={onPress} style={{ padding: 8 }}>
-      {children}
-    </Pressable>
-  );
-}
+// End of file

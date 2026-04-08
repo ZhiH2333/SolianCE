@@ -134,7 +134,9 @@ function mapPayloadToDriveFile(data: unknown, fallbackId?: string): DriveFile {
     throw new Error('无效的文件响应');
   }
   const nested: Record<string, unknown> = readRecord(row.data) ?? row;
+  const fileObj: Record<string, unknown> | null = readRecord(row.file) ?? nested;
   const id: string =
+    pickString(fileObj, ['id', 'hash', 'object_id', 'objectId']) ||
     pickString(nested, ['id', 'hash', 'object_id', 'objectId']) ||
     pickString(row, ['id', 'hash', 'object_id', 'objectId']) ||
     (fallbackId ?? '');
@@ -142,18 +144,20 @@ function mapPayloadToDriveFile(data: unknown, fallbackId?: string): DriveFile {
     throw new Error('无效的文件响应');
   }
   const name: string =
+    pickString(fileObj, ['name', 'filename', 'file_name', 'fileName']) ||
     pickString(nested, ['name', 'filename', 'file_name', 'fileName']) ||
     pickString(row, ['name', 'filename', 'file_name', 'fileName']) ||
     'file';
   const mimeType: string =
+    pickString(fileObj, ['mime_type', 'mimeType', 'content_type', 'contentType']) ||
     pickString(nested, ['mime_type', 'mimeType', 'content_type', 'contentType']) ||
     pickString(row, ['mime_type', 'mimeType', 'content_type', 'contentType']) ||
     'application/octet-stream';
-  const size: number = pickSize(nested) || pickSize(row);
-  const url: string = extractUrlFromPayload(nested, id) || extractUrlFromPayload(row, id);
+  const size: number = pickSize(fileObj) || pickSize(nested) || pickSize(row);
+  const url: string = extractUrlFromPayload(fileObj, id) || extractUrlFromPayload(nested, id) || extractUrlFromPayload(row, id);
   const type: DriveFile['type'] = detectFileType(mimeType);
-  const createdAt: string = pickString(nested, ['created_at', 'createdAt']) || pickString(row, ['created_at', 'createdAt']) || '';
-  const updatedAt: string = pickString(nested, ['updated_at', 'updatedAt']) || pickString(row, ['updated_at', 'updatedAt']) || '';
+  const createdAt: string = pickString(fileObj, ['created_at', 'createdAt']) || pickString(nested, ['created_at', 'createdAt']) || pickString(row, ['created_at', 'createdAt']) || '';
+  const updatedAt: string = pickString(fileObj, ['updated_at', 'updatedAt']) || pickString(nested, ['updated_at', 'updatedAt']) || pickString(row, ['updated_at', 'updatedAt']) || '';
   return { id, url: url || `${API_BASE_URL}/drive/files/${id}`, name, mimeType, size, type, createdAt, updatedAt };
 }
 
@@ -193,7 +197,11 @@ export async function getFolderContents(
     offset: String(offset),
     take: String(take),
   });
-  const path = folderId ? `/drive/index/browse/${encodeURIComponent(folderId)}?${params.toString()}` : `/drive/index/browse?${params.toString()}`;
+  let path = '/drive/index/browse?';
+  if (folderId) {
+    params.set('path', '/' + folderId);
+  }
+  path += params.toString();
   const { data, tokenPair } = await performAuthorizedFetch(path, { method: 'GET' }, before);
   await persistTokenIfRefreshed(before, tokenPair);
   const root = data as Record<string, unknown>;
@@ -207,7 +215,7 @@ export async function getFolderContents(
         folders.push({
           id: f,
           name: f,
-          path: '',
+          path: '/' + f,
           parentId: folderId,
           createdAt: '',
           updatedAt: '',
@@ -494,30 +502,49 @@ export async function uploadFile(
 export interface DriveQuota {
   used: number;
   total: number;
-  fileCount: number;
   usedFiles: number;
   totalFiles: number;
+  usedPoints: number;
+  totalPoints: number;
+  pools: Array<{
+    poolId: string;
+    poolName: string;
+    usageBytes: number;
+    fileCount: number;
+  }>;
 }
 
 function mapJsonToQuota(data: unknown): DriveQuota {
   if (Array.isArray(data)) {
     let totalUsed = 0;
     let totalFiles = 0;
+    const pools: Array<{ poolId: string; poolName: string; usageBytes: number; fileCount: number }> = [];
     for (const pool of data) {
       const poolRecord = pool as Record<string, unknown>;
-      totalUsed += typeof poolRecord.usage_bytes === 'number' ? poolRecord.usage_bytes : 0;
-      totalFiles += typeof poolRecord.file_count === 'number' ? poolRecord.file_count : 0;
+      const usageBytes = typeof poolRecord.usage_bytes === 'number' ? poolRecord.usage_bytes : 0;
+      const fileCount = typeof poolRecord.file_count === 'number' ? poolRecord.file_count : 0;
+      totalUsed += usageBytes;
+      totalFiles += fileCount;
+      pools.push({
+        poolId: String(poolRecord.pool_id || ''),
+        poolName: String(poolRecord.pool_name || ''),
+        usageBytes,
+        fileCount,
+      });
     }
-    return { used: totalUsed, total: 0, fileCount: totalFiles, usedFiles: totalFiles, totalFiles: 0 };
+    return { used: totalUsed, total: 0, usedFiles: totalFiles, totalFiles: totalFiles, usedPoints: 0, totalPoints: 0, pools };
   }
   const root: Record<string, unknown> | null = readRecord(data);
   if (!root) {
-    return { used: 0, total: 0, fileCount: 0, usedFiles: 0, totalFiles: 0 };
+    return { used: 0, total: 0, usedFiles: 0, totalFiles: 0, usedPoints: 0, totalPoints: 0, pools: [] };
   }
-  const basedQuota = pickNumberField(root, ['based_quota', 'basedQuota', 'quota']) || 0;
-  const extraQuota = pickNumberField(root, ['extra_quota', 'extraQuota']) || 0;
-  const totalQuota = pickNumberField(root, ['total_quota', 'totalQuota']) || (basedQuota + extraQuota);
-  return { used: 0, total: totalQuota * 1024 * 1024, fileCount: 0, usedFiles: 0, totalFiles: 0 };
+  const used = pickNumberField(root, ['used', 'used_bytes', 'usedBytes', 'used_quota', 'usedQuota']) || 0;
+  const total = pickNumberField(root, ['total', 'quota', 'limit', 'total_quota', 'totalQuota', 'total_quota']) || 0;
+  const usedFiles = pickNumberField(root, ['count', 'file_count', 'fileCount', 'files']) || 0;
+  const totalFiles = pickNumberField(root, ['max_files', 'maxFiles', 'file_limit', 'fileLimit']) || 0;
+  const usedPoints = pickNumberField(root, ['points', 'used_points', 'usedPoints', 'credits', 'used_credits']) || 0;
+  const totalPoints = pickNumberField(root, ['max_points', 'maxPoints', 'points_limit', 'pointsLimit', 'credits_limit', 'creditsLimit']) || 0;
+  return { used, total, usedFiles, totalFiles, usedPoints, totalPoints, pools: [] };
 }
 
 export async function getQuota(): Promise<DriveQuota> {
@@ -528,11 +555,13 @@ export async function getQuota(): Promise<DriveQuota> {
   const quota = mapJsonToQuota(quotaData);
   const usage = mapJsonToQuota(usageData);
   return {
-    used: usage.used,
-    total: quota.total,
-    fileCount: usage.fileCount,
-    usedFiles: usage.fileCount,
-    totalFiles: quota.total > 0 ? 999999 : 0,
+    used: usage.used || quota.used,
+    total: quota.total || usage.total,
+    usedFiles: usage.usedFiles,
+    totalFiles: usage.totalFiles || quota.totalFiles,
+    usedPoints: usage.usedPoints || quota.usedPoints,
+    totalPoints: quota.totalPoints || usage.totalPoints,
+    pools: usage.pools,
   };
 }
 
