@@ -735,7 +735,7 @@ export default function DriveScreen() {
               />
             )}
             <Appbar.Content
-              title={currentFolderId ? folderPath[folderPath.length - 1]?.name || '文件夹' : '云盘'}
+              title={currentFolderId ? folderPath[folderPath.length - 1]?.name || '文件夹' : '文件'}
               titleStyle={{ color: theme.colors.onSurface, fontWeight: '600', textAlign: 'center' }}
             />
             <Appbar.Action

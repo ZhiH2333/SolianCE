@@ -21,7 +21,7 @@ const NAV_DESTINATIONS: NavDestination[] = [
   { label: '探索', icon: 'compass', path: '/(drawer)/(tabs)/explore' },
   { label: '聊天', icon: 'message-text', path: '/(drawer)/(tabs)/messaging' },
   { label: '领域', icon: 'account-group', path: '/(drawer)/(tabs)/realms' },
-  { label: '云盘', icon: 'folder', path: '/(drawer)/drive' },
+  { label: '文件', icon: 'folder', path: '/(drawer)/drive' },
   { label: '新闻', icon: 'newspaper', path: '/news' },
   { label: '设置', icon: 'cog', path: '/settings' },
 ];
